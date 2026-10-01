@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+.DS_Store
+build/
+preview.png
+.env
+.env.*
+!.env.example
+*.log
+*.log.[0-9]
+.codex/
+.aws/
+auth.json
+*.pem
+*.key
