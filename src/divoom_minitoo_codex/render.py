@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from .appserver import ResetCredit, UsageSnapshot, UsageWindow
 from .activity import CodexActivity, read_activity
+from .i18n import display_text
 
 WIDTH = 160
 HEIGHT = 128
@@ -43,9 +44,11 @@ THEMES = {
     "anime": "Anime portrait with eyelid blink",
     "anime-pixel": "Adult pixel art anime portrait with eyelid blink",
     "anime-pixel-chibi": "Chibi pixel art anime portrait with eyelid blink",
+    "anime-pixel-detail": "Detailed adult pixel art portrait with eyelid blink",
 }
 
-PORTRAIT_THEMES = ("anime", "anime-pixel", "anime-pixel-chibi")
+PIXEL_PORTRAIT_THEMES = ("anime-pixel", "anime-pixel-chibi", "anime-pixel-detail")
+PORTRAIT_THEMES = ("anime", *PIXEL_PORTRAIT_THEMES)
 
 
 class AnimePalette(NamedTuple):
@@ -144,13 +147,13 @@ _PIXEL_GLYPHS = {
 }
 
 
-def _reset_display_text(resets_at: int | None, window_duration_mins: int | None) -> str:
+def _reset_display_text(resets_at: int | None, window_duration_mins: int | None, language: str = "en") -> str:
     if resets_at is None:
         return "--"
     reset_at = datetime.fromtimestamp(resets_at).astimezone()
     if window_duration_mins is not None and window_duration_mins <= 1_440:
         return reset_at.strftime("%H:%M")
-    return reset_at.strftime("%m/%d")
+    return reset_at.strftime("%d/%m" if language == "es" else "%m/%d")
 
 
 def _reset_time_remaining(window: UsageWindow, now: datetime) -> float | None:
@@ -166,6 +169,7 @@ def _reset_expiry_rows(
     snapshot: UsageSnapshot,
     now: datetime,
     limit: int = 3,
+    language: str = "en",
 ) -> tuple[tuple[str, ...], int]:
     credits = snapshot.reset_credits.credits
     if not credits:
@@ -182,13 +186,14 @@ def _reset_expiry_rows(
     rows: list[str] = []
     for index, credit in enumerate(ordered[:limit], start=1):
         if not credit.expiration_known:
-            expiry = "DATE N/A"
+            expiry = display_text("DATE N/A", language)
         elif credit.expires_at is None:
-            expiry = "NO EXPIRY"
+            expiry = display_text("NO EXPIRY", language)
         else:
             expiry_at = datetime.fromtimestamp(credit.expires_at).astimezone()
             days_left = max(0, math.ceil((credit.expires_at - now.timestamp()) / 86_400))
-            expiry = f"{expiry_at:%m/%d/%y} {days_left}D"
+            date = expiry_at.strftime("%d/%m/%y" if language == "es" else "%m/%d/%y")
+            expiry = f"{date} {days_left}D"
         rows.append(f"{index} {expiry}")
     return tuple(rows), max(0, snapshot.reset_credits.available_count - len(rows))
 
@@ -319,6 +324,7 @@ def _draw_window(
     box: tuple[int, int, int, int],
     now: datetime,
     accent: tuple[int, int, int],
+    language: str = "en",
 ) -> None:
     left, top, right, bottom = box
     height = bottom - top
@@ -336,7 +342,7 @@ def _draw_window(
 
     label = window.label.upper()[:8]
     draw.text((left + 16, top + 8), label, font=font, fill=MUTED)
-    left_label = "LEFT"
+    left_label = display_text("LEFT", language)
     left_width = draw.textbbox((0, 0), left_label, font=font)[2]
     draw.text((right - left_width - 8, top + 8), left_label, font=font, fill=(89, 108, 141))
 
@@ -361,10 +367,16 @@ def _draw_window(
         radius=3,
     )
 
-    reset = _reset_display_text(window.resets_at, window.window_duration_mins)
+    reset = _reset_display_text(window.resets_at, window.window_duration_mins, language)
     reset_font = _anime_font(7) if right - left < 100 else font
-    reset_text = f"RESET {reset}"
-    _draw_centered_text(draw, reset_text, reset_font, left, right, bottom - 15, (194, 207, 229))
+    reset_text = f"{display_text('RESET', language)} {reset}"
+    if language == "es":
+        # Keep the longer label clear of the refill-time meter, and center it
+        # on the same content region as the quota bar.
+        reset_font = _anime_font(6) if right - left < 100 else font
+        _draw_centered_text(draw, reset_text, reset_font, bar_left, bar_right, bottom - 15, (194, 207, 229))
+    else:
+        _draw_centered_text(draw, reset_text, reset_font, left, right, bottom - 15, (194, 207, 229))
 
 
 def _render_neon(
@@ -372,6 +384,7 @@ def _render_neon(
     now: datetime | None = None,
     activity: CodexActivity | None = None,
     animation_frame: int = 0,
+    language: str = "en",
 ) -> Image.Image:
     now = now or datetime.now().astimezone()
     activity = activity or read_activity()
@@ -391,9 +404,9 @@ def _render_neon(
     draw.rectangle((9, 14, 12, 17), fill=(73, 168, 203))
     draw.rectangle((14, 14, 17, 17), fill=ACCENTS[1])
     draw.text((23, 8), "CODEX", font=font, fill=TEXT)
-    draw.text((23, 20), "USAGE", font=font, fill=MUTED)
+    draw.text((23, 20), display_text("USAGE", language), font=font, fill=MUTED)
 
-    status_label = "WORK" if activity.working else "IDLE" if activity.hooks_installed else "SETUP"
+    status_label = display_text("WORK", language) if activity.working else display_text("IDLE", language) if activity.hooks_installed else display_text("SETUP", language)
     status_color = (71, 225, 162) if activity.working else (111, 136, 174) if activity.hooks_installed else (255, 190, 76)
     status_width = draw.textbbox((0, 0), status_label, font=font)[2]
     badge_left = WIDTH - 8 - status_width - 21
@@ -416,16 +429,16 @@ def _render_neon(
         card_boxes = ((8, 39, 152, 108),)
     else:
         draw.rounded_rectangle((8, 43, WIDTH - 8, 99), radius=8, fill=CARD, outline=CARD_EDGE)
-        draw.text((18, 67), "NO USAGE DATA", font=font, fill=(255, 190, 76))
+        draw.text((18, 67), display_text("NO USAGE DATA", language), font=font, fill=(255, 190, 76))
         card_boxes = ()
 
     for index, (window, box) in enumerate(zip(windows, card_boxes)):
-        _draw_window(draw, font, window, box, now, ACCENTS[min(index, len(ACCENTS) - 1)])
+        _draw_window(draw, font, window, box, now, ACCENTS[min(index, len(ACCENTS) - 1)], language)
 
     # Leave a few pixels of physical safe area below the footer; the MiniToo
     # can crop the last row or two at the bottom edge depending on alignment.
     draw.line((8, 111, WIDTH - 8, 111), fill=(31, 42, 63), width=1)
-    updated = "CODEX LIVE"
+    updated = display_text("CODEX LIVE", language)
     draw.text((9, 115), updated, font=font, fill=(112, 132, 166))
     plan = (snapshot.plan_type or "PLAN").upper()[:6]
     footer = f"PLAN {plan}"
@@ -543,6 +556,7 @@ def _draw_pixel_window(
     box: tuple[int, int, int, int],
     now: datetime,
     accent: tuple[int, int, int],
+    language: str = "en",
 ) -> None:
     left, top, right, bottom = box
     draw.rectangle(box, fill=(13, 23, 43), outline=(42, 69, 101), width=1)
@@ -557,11 +571,11 @@ def _draw_pixel_window(
     draw.rectangle((right - 5, bottom - 3, right - 2, bottom - 2), fill=accent)
 
     center_x = (left + right) // 2
-    label = f"{window.label.upper()[:6]} LEFT"
+    label = f"{window.label.upper()[:6]} {display_text('LEFT', language)}"
     _draw_pixel_centered_text(draw, label, center_x, top + 3, (129, 171, 205))
     quota_left = _quota_remaining_percent(window)
     _draw_pixel_centered_text(draw, f"{quota_left}%", center_x, top + 11, TEXT, scale=2)
-    reset_text = f"RESET {_reset_display_text(window.resets_at, window.window_duration_mins)}"
+    reset_text = f"{display_text('RESET', language)} {_reset_display_text(window.resets_at, window.window_duration_mins, language)}"
     _draw_pixel_centered_text(draw, reset_text, center_x, top + 36, (161, 195, 219))
 
     available_width = right - left - 10
@@ -593,6 +607,7 @@ def _render_pixel_art(
     now: datetime,
     activity: CodexActivity,
     animation_frame: int,
+    language: str = "en",
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), (7, 12, 27))
     draw = ImageDraw.Draw(image)
@@ -610,14 +625,14 @@ def _render_pixel_art(
     draw.rectangle((11, 10, 13, 12), fill=(66, 231, 214))
     draw.rectangle((14, 13, 16, 15), fill=(169, 119, 255))
     _draw_pixel_text(draw, "CODEX", 21, 8, TEXT, scale=2)
-    _draw_pixel_text(draw, "USAGE ARCADE", 21, 22, (94, 147, 185))
+    _draw_pixel_text(draw, display_text("USAGE ARCADE", language), 21, 22, (94, 147, 185))
 
     if activity.working:
-        status, detail, status_color = "WORK", "THINKING", (70, 235, 174)
+        status, detail, status_color = display_text("WORK", language), display_text("THINKING", language), (70, 235, 174)
     elif activity.hooks_installed:
-        status, detail, status_color = "IDLE", "ON STANDBY", (106, 174, 211)
+        status, detail, status_color = display_text("IDLE", language), display_text("ON STANDBY", language), (106, 174, 211)
     else:
-        status, detail, status_color = "SETUP", "INSTALL HOOKS", (255, 195, 76)
+        status, detail, status_color = display_text("SETUP", language), display_text("INSTALL HOOKS", language), (255, 195, 76)
     draw.rectangle((118, 11, 121, 14), fill=status_color)
     _draw_pixel_text(draw, status, 125, 10, status_color)
     draw.line((8, 28, WIDTH - 8, 28), fill=(35, 56, 82), width=1)
@@ -634,13 +649,13 @@ def _render_pixel_art(
         boxes = ((8, 61, 152, 106),)
     else:
         draw.rectangle((8, 65, WIDTH - 8, 103), fill=(13, 23, 43), outline=(42, 69, 101))
-        _draw_pixel_text(draw, "NO USAGE DATA", 18, 80, (255, 195, 76), scale=2)
+        _draw_pixel_text(draw, display_text("NO USAGE DATA", language), 18, 80, (255, 195, 76), scale=2)
         boxes = ()
     for index, (window, box) in enumerate(zip(windows, boxes)):
-        _draw_pixel_window(draw, window, box, now, ACCENTS[min(index, len(ACCENTS) - 1)])
+        _draw_pixel_window(draw, window, box, now, ACCENTS[min(index, len(ACCENTS) - 1)], language)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=(35, 56, 82), width=1)
-    _draw_pixel_text(draw, "CODEX LIVE", 9, 116, (102, 139, 174))
+    _draw_pixel_text(draw, display_text("CODEX LIVE", language), 9, 116, (102, 139, 174))
     plan = (snapshot.plan_type or "PLAN").upper()[:7]
     plan_width = len(f"PLAN {plan}") * 4 - 1
     _draw_pixel_text(draw, f"PLAN {plan}", WIDTH - 9 - plan_width, 116, (102, 139, 174))
@@ -684,24 +699,28 @@ def _anime_font(size: int, bold: bool = False, pixel_art: bool = False) -> Image
             return ImageFont.load_default()
 
 
-def _anime_reset_text(resets_at: int | None, window_duration_mins: int | None) -> str:
-    return _reset_display_text(resets_at, window_duration_mins)
+def _anime_reset_text(resets_at: int | None, window_duration_mins: int | None, language: str = "en") -> str:
+    return _reset_display_text(resets_at, window_duration_mins, language)
 
 
-@lru_cache(maxsize=6)
-def _open_anime_portrait(blinking: bool, pixel_art: bool = False, chibi: bool = False) -> Image.Image:
+@lru_cache(maxsize=8)
+def _open_anime_portrait(blinking: bool, pixel_art: bool = False, chibi: bool = False, detail: bool = False) -> Image.Image:
     """Load the matching open or closed portrait at native display size."""
-    prefix = "anime_pixel_chibi_portrait" if chibi else "anime_pixel_portrait" if pixel_art else "anime_portrait"
+    prefix = (
+        "anime_pixel_detail_portrait" if detail else
+        "anime_pixel_chibi_portrait" if chibi else
+        "anime_pixel_portrait" if pixel_art else "anime_portrait"
+    )
     filename = f"{prefix}_blink.png" if blinking else f"{prefix}.png"
     portrait_path = Path(__file__).parent / "assets" / filename
     with Image.open(portrait_path) as source:
         return source.convert("RGB")
 
 
-@lru_cache(maxsize=24)
-def _anime_portrait(blinking: bool, color: str, pixel_art: bool = False, chibi: bool = False) -> Image.Image:
+@lru_cache(maxsize=32)
+def _anime_portrait(blinking: bool, color: str, pixel_art: bool = False, chibi: bool = False, detail: bool = False) -> Image.Image:
     """Return the selected portrait palette, optionally with closed eyelids."""
-    portrait = _open_anime_portrait(blinking, pixel_art, chibi).copy()
+    portrait = _open_anime_portrait(blinking, pixel_art, chibi, detail).copy()
     palette = ANIME_PALETTES[color]
     if palette.hue_shift:
         hsv = portrait.convert("HSV")
@@ -734,10 +753,11 @@ def _draw_anime_mascot(
     anime_color: str,
     pixel_art: bool = False,
     chibi: bool = False,
+    detail: bool = False,
 ) -> None:
     """Place one complete portrait frame for the blink animation."""
     del activity
-    image.paste(_anime_portrait(animation_frame % 6 == 4, anime_color, pixel_art, chibi), (x, y))
+    image.paste(_anime_portrait(animation_frame % 6 == 4, anime_color, pixel_art, chibi, detail), (x, y))
 
 
 def _draw_anime_window(
@@ -748,6 +768,7 @@ def _draw_anime_window(
     palette: AnimePalette,
     now: datetime,
     pixel_art: bool = False,
+    language: str = "en",
 ) -> None:
     left, top, right, bottom = box
     label_font = _anime_font(9, bold=True, pixel_art=pixel_art)
@@ -782,9 +803,9 @@ def _draw_anime_window(
         radius=0 if pixel_art else 2,
     )
 
-    reset = f"RESET {_anime_reset_text(window.resets_at, window.window_duration_mins)}"
+    reset = f"{display_text('RESET', language)} {_anime_reset_text(window.resets_at, window.window_duration_mins, language)}"
     reset_font = _anime_font(7, bold=True, pixel_art=pixel_art)
-    _draw_centered_text(draw, reset, reset_font, left, right, top + 27, palette.muted)
+    _draw_centered_text(draw, reset, reset_font, left + (4 if language == "es" else 0), right, top + 27, palette.muted)
 
 
 def _draw_anime_vertical_window(
@@ -795,15 +816,20 @@ def _draw_anime_vertical_window(
     palette: AnimePalette,
     now: datetime,
     pixel_art: bool = False,
+    language: str = "en",
 ) -> None:
     """Use the full single-window panel for a bottom-up vertical meter."""
     left, top, right, bottom = box
     label_font = _anime_font(9, bold=True, pixel_art=pixel_art)
     value_font = _anime_font(10, bold=True, pixel_art=pixel_art)
+    # Reserve a clear footer for the longer Spanish refill label. Both meters
+    # stop above it so the text cannot crowd the side meter or the quota fill.
+    meter_bottom = bottom - (20 if language == "es" else 16)
+    time_meter_bottom = meter_bottom if language == "es" else bottom - 6
     draw.rounded_rectangle(box, radius=0 if pixel_art else 5, fill=palette.card, outline=palette.card_edge, width=1)
     _draw_vertical_progress_bar(
         draw,
-        (left + 3, top + 6, left + 5, bottom - 6),
+        (left + 3, top + 6, left + 5, time_meter_bottom),
         _reset_time_remaining(window, now),
         track=palette.bar_bg,
         fill=palette.idle,
@@ -824,7 +850,6 @@ def _draw_anime_vertical_window(
     _draw_text_centered_at(draw, percent, value_font, meter_center_x, top + 13, palette.ink)
 
     meter_top = top + 29
-    meter_bottom = bottom - 16
     draw.rounded_rectangle(
         (meter_left, meter_top, meter_right, meter_bottom),
         radius=0 if pixel_art else 4,
@@ -838,7 +863,7 @@ def _draw_anime_vertical_window(
             fill=_bar_color(window.used_percent, accent),
         )
 
-    reset = f"RESET {_anime_reset_text(window.resets_at, window.window_duration_mins)}"
+    reset = f"{display_text('RESET', language)} {_anime_reset_text(window.resets_at, window.window_duration_mins, language)}"
     reset_font = _anime_font(7, bold=True, pixel_art=pixel_art)
     _draw_text_centered_at(draw, reset, reset_font, meter_center_x, bottom - 12, palette.muted)
 
@@ -851,6 +876,8 @@ def _render_anime(
     anime_color: str,
     pixel_art: bool = False,
     chibi: bool = False,
+    detail: bool = False,
+    language: str = "en",
 ) -> Image.Image:
     palette = ANIME_PALETTES[anime_color]
     image = Image.new("RGB", (WIDTH, HEIGHT), palette.paper)
@@ -864,14 +891,14 @@ def _render_anime(
     draw.rectangle((2, 2, WIDTH - 3, HEIGHT - 3), outline=palette.dark, width=2)
     draw.rectangle((5, 5, WIDTH - 6, HEIGHT - 6), outline=palette.light, width=1)
     draw.text((9, 7), "CODEX", font=title_font, fill=palette.ink)
-    draw.text((10, 22 if pixel_art else 20), "USAGE", font=caption_font, fill=palette.idle)
+    draw.text((10, 22 if pixel_art else 20), display_text("USAGE", language), font=caption_font, fill=palette.idle)
 
     if activity.working:
-        status, status_color = "WORKING", palette.working
+        status, status_color = display_text("WORKING", language), palette.working
     elif activity.hooks_installed:
-        status, status_color = "IDLE", palette.idle
+        status, status_color = display_text("IDLE", language), palette.idle
     else:
-        status, status_color = "SETUP", palette.setup
+        status, status_color = display_text("SETUP", language), palette.setup
     draw.rounded_rectangle((76, 5, 152, 26), radius=0 if pixel_art else 6, fill=palette.badge, outline=palette.badge_edge)
     if activity.working:
         equalizer_frames = (
@@ -893,24 +920,24 @@ def _render_anime(
     frame_box = (4, 27, 89, 109)
     draw.rectangle(frame_box, fill=palette.dark, outline=palette.dark, width=2)
     draw.rectangle((7, 29, 86, 108), fill=palette.frame, outline=palette.frame_light, width=1)
-    _draw_anime_mascot(image, 8, 30, activity, animation_frame, anime_color, pixel_art, chibi)
+    _draw_anime_mascot(image, 8, 30, activity, animation_frame, anime_color, pixel_art, chibi, detail)
 
     windows = list(snapshot.windows[:2])
     if len(windows) == 1:
-        _draw_anime_vertical_window(draw, windows[0], (92, 29, 153, 109), palette.primary, palette, now, pixel_art)
+        _draw_anime_vertical_window(draw, windows[0], (92, 29, 153, 109), palette.primary, palette, now, pixel_art, language)
     elif windows:
         accents = (palette.primary, palette.secondary)
         boxes = ((92, 29, 153, 67), (92, 71, 153, 109))
         for index, (window, box) in enumerate(zip(windows, boxes)):
-            _draw_anime_window(draw, window, box, accents[min(index, 1)], palette, now, pixel_art)
+            _draw_anime_window(draw, window, box, accents[min(index, 1)], palette, now, pixel_art, language)
     else:
         draw.rounded_rectangle((92, 42, 153, 96), radius=0 if pixel_art else 5, fill=palette.card, outline=palette.card_edge)
         message_font = _anime_font(8, bold=True, pixel_art=pixel_art)
-        draw.text((97, 62), "NO USAGE", font=message_font, fill=palette.primary)
-        draw.text((104, 74), "DATA", font=message_font, fill=palette.primary)
+        draw.text((97, 62), display_text("NO USAGE", language), font=message_font, fill=palette.primary)
+        draw.text((104, 74), display_text("DATA", language), font=message_font, fill=palette.primary)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=palette.light, width=1)
-    draw.text((10, 112), "CODEX USAGE", font=footer_font, fill=palette.footer)
+    draw.text((10, 112), display_text("CODEX USAGE", language), font=footer_font, fill=palette.footer)
     plan = (snapshot.plan_type or "PLAN").upper()[:7]
     footer = f"PLAN {plan}"
     footer_width = draw.textbbox((0, 0), footer, font=footer_font)[2]
@@ -918,7 +945,7 @@ def _render_anime(
     return image
 
 
-def _render_neon_reset_credits(snapshot: UsageSnapshot, now: datetime) -> Image.Image:
+def _render_neon_reset_credits(snapshot: UsageSnapshot, now: datetime, language: str = "en") -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)
     draw = ImageDraw.Draw(image)
     font = ImageFont.load_default()
@@ -936,27 +963,27 @@ def _render_neon_reset_credits(snapshot: UsageSnapshot, now: datetime) -> Image.
     draw.rectangle((9, 14, 12, 17), fill=(73, 168, 203))
     draw.rectangle((14, 14, 17, 17), fill=ACCENTS[1])
     draw.text((23, 8), "CODEX", font=font, fill=TEXT)
-    draw.text((23, 20), "RESET CREDITS", font=font, fill=MUTED)
+    draw.text((23, 20), display_text("RESET CREDITS", language), font=font, fill=MUTED)
     draw.line((8, 31, WIDTH - 8, 31), fill=(31, 42, 63), width=1)
 
     draw.rounded_rectangle((8, 37, 152, 106), radius=8, fill=CARD, outline=CARD_EDGE)
-    _draw_centered_text(draw, "AVAILABLE", font, 12, 58, 44, MUTED)
+    _draw_centered_text(draw, display_text("AVAILABLE", language), _anime_font(7, bold=True) if language == "es" else font, 12, 58, 44, MUTED)
     _draw_centered_text(draw, str(snapshot.reset_credits.available_count), count_font, 12, 58, 54, ACCENTS[0])
-    _draw_centered_text(draw, "RESETS", font, 12, 58, 84, TEXT)
+    _draw_centered_text(draw, display_text("RESETS", language), _anime_font(7, bold=True) if language == "es" else font, 12, 58, 84, TEXT)
     draw.line((65, 43, 65, 100), fill=CARD_EDGE, width=1)
-    draw.text((73, 44), "EXPIRY / DAYS LEFT", font=caption_font, fill=MUTED)
+    draw.text((73, 44), display_text("EXPIRY / DAYS LEFT", language), font=caption_font, fill=MUTED)
 
-    rows, more_count = _reset_expiry_rows(snapshot, now)
+    rows, more_count = _reset_expiry_rows(snapshot, now, language=language)
     if rows:
         for index, row in enumerate(rows):
             draw.text((73, 56 + index * 12), row, font=row_font, fill=TEXT)
         if more_count:
-            draw.text((73, 94), f"+{more_count} MORE", font=font, fill=MUTED)
+            draw.text((73, 94), display_text("+{count} MORE", language, count=more_count), font=font, fill=MUTED)
     else:
-        draw.text((73, 60), "DATE N/A", font=title_font, fill=(255, 190, 76))
+        draw.text((73, 60), display_text("DATE N/A", language), font=title_font, fill=(255, 190, 76))
 
     draw.line((8, 111, WIDTH - 8, 111), fill=(31, 42, 63), width=1)
-    draw.text((9, 115), "CODEX LIVE", font=font, fill=(112, 132, 166))
+    draw.text((9, 115), display_text("CODEX LIVE", language), font=font, fill=(112, 132, 166))
     plan = (snapshot.plan_type or "PLAN").upper()[:6]
     footer = f"PLAN {plan}"
     footer_width = draw.textbbox((0, 0), footer, font=font)[2]
@@ -968,6 +995,7 @@ def _render_pixel_reset_credits(
     snapshot: UsageSnapshot,
     now: datetime,
     animation_frame: int = 0,
+    language: str = "en",
 ) -> Image.Image:
     image = Image.new("RGB", (WIDTH, HEIGHT), (7, 12, 27))
     draw = ImageDraw.Draw(image)
@@ -980,25 +1008,25 @@ def _render_pixel_reset_credits(
 
     draw.rectangle((7, 7, WIDTH - 8, 26), fill=(10, 20, 39))
     _draw_pixel_text(draw, "CODEX", 21, 8, TEXT, scale=2)
-    _draw_pixel_text(draw, "RESET VAULT", 21, 22, (94, 147, 185))
+    _draw_pixel_text(draw, display_text("RESET VAULT", language), 21, 22, (94, 147, 185))
     draw.line((8, 28, WIDTH - 8, 28), fill=(35, 56, 82), width=1)
 
     draw.rectangle((9, 36, 151, 106), fill=(13, 23, 43), outline=(42, 69, 101))
-    _draw_pixel_centered_text(draw, f"AVAILABLE {snapshot.reset_credits.available_count}", 80, 39, (98, 211, 238), scale=1)
-    _draw_pixel_centered_text(draw, "DATE / DAYS LEFT", 80, 48, (94, 147, 185), scale=1)
+    _draw_pixel_centered_text(draw, display_text("AVAILABLE {count}", language, count=snapshot.reset_credits.available_count), 80, 39, (98, 211, 238), scale=1)
+    _draw_pixel_centered_text(draw, display_text("DATE / DAYS LEFT", language), 80, 48, (94, 147, 185), scale=1)
     draw.line((15, 57, WIDTH - 15, 57), fill=(35, 56, 82), width=1)
-    rows, more_count = _reset_expiry_rows(snapshot, now)
+    rows, more_count = _reset_expiry_rows(snapshot, now, language=language)
     if rows:
         for index, row in enumerate(rows):
             row = row.replace("/", "-")
             _draw_pixel_centered_text(draw, row, 80, 60 + index * 12, TEXT, scale=2)
         if more_count:
-            _draw_pixel_centered_text(draw, f"+{more_count} MORE", 80, 98, (94, 147, 185))
+            _draw_pixel_centered_text(draw, display_text("+{count} MORE", language, count=more_count), 80, 98, (94, 147, 185))
     else:
-        _draw_pixel_centered_text(draw, "EXPIRY DATE N/A", 80, 72, (255, 195, 76), scale=2)
+        _draw_pixel_centered_text(draw, display_text("EXPIRY DATE N/A", language), 80, 72, (255, 195, 76), scale=2)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=(35, 56, 82), width=1)
-    _draw_pixel_text(draw, "CODEX LIVE", 9, 116, (102, 139, 174))
+    _draw_pixel_text(draw, display_text("CODEX LIVE", language), 9, 116, (102, 139, 174))
     plan = (snapshot.plan_type or "PLAN").upper()[:7]
     plan_width = len(f"PLAN {plan}") * 4 - 1
     _draw_pixel_text(draw, f"PLAN {plan}", WIDTH - 9 - plan_width, 116, (102, 139, 174))
@@ -1012,6 +1040,8 @@ def _render_anime_reset_credits(
     now: datetime,
     pixel_art: bool = False,
     chibi: bool = False,
+    detail: bool = False,
+    language: str = "en",
 ) -> Image.Image:
     palette = ANIME_PALETTES[anime_color]
     image = Image.new("RGB", (WIDTH, HEIGHT), palette.paper)
@@ -1025,34 +1055,34 @@ def _render_anime_reset_credits(
     draw.rectangle((2, 2, WIDTH - 3, HEIGHT - 3), outline=palette.dark, width=2)
     draw.rectangle((5, 5, WIDTH - 6, HEIGHT - 6), outline=palette.light, width=1)
     draw.text((9, 7), "CODEX", font=title_font, fill=palette.ink)
-    draw.text((10, 22 if pixel_art else 20), "RESET CREDITS", font=caption_font, fill=palette.idle)
+    draw.text((10, 22 if pixel_art else 20), display_text("RESET CREDITS", language), font=caption_font, fill=palette.idle)
 
     count = snapshot.reset_credits.available_count
     draw.rounded_rectangle((76, 5, 152, 26), radius=0 if pixel_art else 6, fill=palette.badge, outline=palette.badge_edge)
-    _draw_centered_text(draw, "RESET BANK", count_font, 77, 151, 11, palette.working)
+    _draw_centered_text(draw, display_text("RESET BANK", language), count_font, 77, 151, 11, palette.working)
 
     frame_box = (4, 27, 89, 109)
     draw.rectangle(frame_box, fill=palette.dark, outline=palette.dark, width=2)
     draw.rectangle((7, 29, 86, 108), fill=palette.frame, outline=palette.frame_light, width=1)
-    _draw_anime_mascot(image, 8, 30, activity, animation_frame=0, anime_color=anime_color, pixel_art=pixel_art, chibi=chibi)
+    _draw_anime_mascot(image, 8, 30, activity, animation_frame=0, anime_color=anime_color, pixel_art=pixel_art, chibi=chibi, detail=detail)
 
     draw.rounded_rectangle((92, 29, 153, 109), radius=0 if pixel_art else 5, fill=palette.card, outline=palette.card_edge)
-    _draw_centered_text(draw, "AVAILABLE", small_font, 93, 152, 34, palette.muted)
+    _draw_centered_text(draw, display_text("AVAILABLE", language), small_font, 93, 152, 34, palette.muted)
     _draw_centered_text(draw, str(count), _anime_font(14, bold=True, pixel_art=pixel_art), 93, 152, 42, palette.ink)
     draw.line((99, 59, 146, 59), fill=palette.card_edge, width=1)
-    _draw_centered_text(draw, "DATE / DAYS", small_font, 93, 152, 60, palette.muted)
-    rows, more_count = _reset_expiry_rows(snapshot, now)
+    _draw_centered_text(draw, display_text("DATE / DAYS", language), small_font, 93, 152, 60, palette.muted)
+    rows, more_count = _reset_expiry_rows(snapshot, now, language=language)
     if rows:
         for index, row in enumerate(rows):
             _draw_centered_text(draw, row, row_font, 93, 152, 69 + index * 9, palette.ink)
         if more_count:
-            _draw_centered_text(draw, f"+{more_count} MORE", small_font, 93, 152, 97, palette.muted)
+            _draw_centered_text(draw, display_text("+{count} MORE", language, count=more_count), small_font, 93, 152, 97, palette.muted)
     else:
-        _draw_centered_text(draw, "EXPIRY DATE N/A", small_font, 93, 152, 74, palette.setup)
+        _draw_centered_text(draw, display_text("EXPIRY DATE N/A", language), small_font, 93, 152, 74, palette.setup)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=palette.light, width=1)
     footer_font = _anime_font(8, bold=True, pixel_art=pixel_art)
-    draw.text((10, 112), "RESET CREDITS", font=footer_font, fill=palette.footer)
+    draw.text((10, 112), display_text("RESET CREDITS", language), font=footer_font, fill=palette.footer)
     plan = (snapshot.plan_type or "PLAN").upper()[:7]
     footer = f"PLAN {plan}"
     footer_width = draw.textbbox((0, 0), footer, font=footer_font)[2]
@@ -1066,6 +1096,7 @@ def render_reset_credits(
     theme: str = "neon",
     anime_color: str = "purple",
     now: datetime | None = None,
+    language: str = "en",
 ) -> Image.Image:
     """Render the periodic reset-credit screen in the selected display theme."""
     if theme not in THEMES:
@@ -1074,10 +1105,13 @@ def render_reset_credits(
         raise ValueError(f"Unknown anime color {anime_color!r}; choose from: {', '.join(ANIME_PALETTES)}")
     now = now or datetime.now().astimezone()
     if theme == "pixel-art":
-        return _render_pixel_reset_credits(snapshot, now)
+        return _render_pixel_reset_credits(snapshot, now, language=language)
     if theme in PORTRAIT_THEMES:
-        return _render_anime_reset_credits(snapshot, activity, anime_color, now, pixel_art=theme != "anime", chibi=theme == "anime-pixel-chibi")
-    return _render_neon_reset_credits(snapshot, now)
+        return _render_anime_reset_credits(
+            snapshot, activity, anime_color, now, pixel_art=theme != "anime",
+            chibi=theme == "anime-pixel-chibi", detail=theme == "anime-pixel-detail", language=language,
+        )
+    return _render_neon_reset_credits(snapshot, now, language=language)
 
 
 def render_usage(
@@ -1087,6 +1121,7 @@ def render_usage(
     animation_frame: int = 0,
     theme: str = "neon",
     anime_color: str = "purple",
+    language: str = "en",
 ) -> Image.Image:
     """Render one 160x128 frame using a named display theme."""
     if theme not in THEMES:
@@ -1096,10 +1131,13 @@ def render_usage(
     now = now or datetime.now().astimezone()
     activity = activity or read_activity()
     if theme == "pixel-art":
-        return _render_pixel_art(snapshot, now, activity, animation_frame)
+        return _render_pixel_art(snapshot, now, activity, animation_frame, language=language)
     if theme in PORTRAIT_THEMES:
-        return _render_anime(snapshot, now, activity, animation_frame, anime_color, pixel_art=theme != "anime", chibi=theme == "anime-pixel-chibi")
-    return _render_neon(snapshot, now, activity, animation_frame)
+        return _render_anime(
+            snapshot, now, activity, animation_frame, anime_color, pixel_art=theme != "anime",
+            chibi=theme == "anime-pixel-chibi", detail=theme == "anime-pixel-detail", language=language,
+        )
+    return _render_neon(snapshot, now, activity, animation_frame, language=language)
 
 
 def render_usage_frames(
@@ -1108,6 +1146,7 @@ def render_usage_frames(
     activity: CodexActivity | None = None,
     theme: str = "neon",
     anime_color: str = "purple",
+    language: str = "en",
 ) -> tuple[Image.Image, ...]:
     """Create native frames for a theme's activity animation."""
     activity = activity or read_activity()
@@ -1129,7 +1168,7 @@ def render_usage_frames(
     else:
         frame_indices = (0,)
     return tuple(
-        render_usage(snapshot, now, activity, animation_frame=index, theme=theme, anime_color=anime_color)
+        render_usage(snapshot, now, activity, animation_frame=index, theme=theme, anime_color=anime_color, language=language)
         for index in frame_indices
     )
 

@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+
+START_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+START_PYTHON="${DIVOOM_PYTHON:-$START_ROOT/.venv/bin/python}"
+if [[ ! -x "$START_PYTHON" ]]; then
+  echo "Install once with ./scripts/install.sh, then run ./start." >&2
+  echo "Instala una vez con ./scripts/install.sh y luego ejecuta ./start." >&2
+  exit 1
+fi
+export PYTHONPATH="$START_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+exec "$START_PYTHON" -m divoom_minitoo_codex.cli start "$@"

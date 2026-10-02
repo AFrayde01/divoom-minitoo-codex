@@ -29,7 +29,7 @@ The native export uses Lanczos downsampling and full RGB PNGs without palette re
 
 The four color options remain `purple`, `red`, `blue` and `green`; the renderer recolors the violet hair, irises and related shadows while retaining the warm skin and blush.
 
-The separate `anime-pixel` (adult) and `anime-pixel-chibi` themes use independent pixel characters. Their source images and prompts are documented in [Pixel artwork provenance](ANIME_PIXEL_ARTWORK.md).
+The separate pixel themes are `anime-pixel` (adult in the chibi drawing style), `anime-pixel-chibi`, and `anime-pixel-detail` (the original detailed adult). Their source images and prompts are documented in [Pixel artwork provenance](ANIME_PIXEL_ARTWORK.md).
 
 ## Generation prompts
 

@@ -208,7 +208,9 @@ class MonitorRecoveryTests(unittest.TestCase):
         ) as server, patch.object(cli, "MiniTooBridge") as bridge, patch.object(
             cli, "read_activity", side_effect=read_activity
         ), patch.object(cli, "render_usage_frames", return_value=(object(),)), patch.object(
-            cli, "encode_for_minitoo", return_value=b"unchanged frame"
+            cli, "encode_rgb_animation", return_value=b"unchanged frame"
+        ), patch.object(cli, "load_preferences", return_value={}), patch.object(
+            cli, "save_preferences"
         ), patch.object(cli.time, "monotonic", side_effect=lambda: clock[0]), patch.object(
             cli.time, "sleep", side_effect=sleep
         ), redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()) as stderr:

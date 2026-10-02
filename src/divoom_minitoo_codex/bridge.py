@@ -41,6 +41,11 @@ class MiniTooBridge:
         self._stderr_thread: Thread | None = None
         self._auth_token: str | None = None
         self._protocol_mismatch = False
+        # Diagnostic scripts use separately compiled bridges; regular monitors
+        # leave this unset and keep their existing JPEG request format.
+        self.diagnostic_codec: str | None = None
+        self.frame_encoding: str | None = None
+        self._supports_rgb = False
 
     def _capture_stderr(self, stream: object, ready: Event) -> None:
         read_line = getattr(stream, "readline")
@@ -52,6 +57,7 @@ class MiniTooBridge:
                 if self.logger is not None:
                     self.logger.info(line)
                 if f"{AUTHENTICATED_READY_MARKER} {self.port}." in line:
+                    self._supports_rgb = "RGB888/Zstandard supported." in line
                     ready.set()
                 elif "local listener ready on port" in line:
                     self._protocol_mismatch = True
@@ -76,6 +82,7 @@ class MiniTooBridge:
         with self._stderr_lock:
             self._stderr_tail.clear()
         self._protocol_mismatch = False
+        self._supports_rgb = False
         if not self.executable.is_file():
             raise MiniTooError(
                 f"Bluetooth bridge not found at {self.executable}. Run scripts/install.sh first."
@@ -149,6 +156,10 @@ class MiniTooBridge:
             "speedMs": speed_ms,
             "authToken": "0" * 64,
         }
+        if self.diagnostic_codec is not None:
+            request_body["diagnosticCodec"] = self.diagnostic_codec
+        if self.frame_encoding is not None:
+            request_body["frameEncoding"] = self.frame_encoding
         request = json.dumps(request_body, separators=(",", ":")).encode() + b"\n"
         if len(request) > MAX_REQUEST_BYTES:
             raise MiniTooError("Image request exceeds the bridge's 512 KiB limit.")
@@ -156,6 +167,8 @@ class MiniTooBridge:
             self.start()
         if self._auth_token is None:
             raise MiniTooError("The local bridge has no authentication credential. Restart the monitor.")
+        if self.frame_encoding == "rgb-zstd" and not self._supports_rgb:
+            raise MiniTooError("The MiniToo bridge does not support RGB888/Zstandard. Rebuild it with scripts/install.sh before sending RGB.")
         request_body["authToken"] = self._auth_token
         request = json.dumps(request_body, separators=(",", ":")).encode() + b"\n"
         stage = "connecting to the local bridge"
