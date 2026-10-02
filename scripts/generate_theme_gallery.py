@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from PIL import Image
 
 from divoom_minitoo_codex.activity import CodexActivity
 from divoom_minitoo_codex.appserver import ResetCredit, ResetCredits, UsageSnapshot, UsageWindow
-from divoom_minitoo_codex.render import render_reset_credits, render_usage, render_usage_frames
+from divoom_minitoo_codex.render import PORTRAIT_THEMES, render_reset_credits, render_usage, render_usage_frames
 from divoom_minitoo_codex.timebox_mini import (
     render_timebox_reset_credits,
     render_timebox_usage,
@@ -79,7 +80,44 @@ def save_anime_animation(images: tuple[Image.Image, ...], name: str = "anime-dem
     )
 
 
+def save_minitoo_gallery(snapshot: UsageSnapshot, now: datetime, activity: CodexActivity, language: str) -> None:
+    suffix = "-es" if language == "es" else ""
+    for theme in ("neon", "pixel-art"):
+        save(render_usage(snapshot, now, activity, theme=theme, language=language), f"{theme}{suffix}.png")
+        save(render_reset_credits(snapshot, activity, theme=theme, now=now, language=language), f"{theme}-resets{suffix}.png")
+
+    for theme in PORTRAIT_THEMES:
+        for color in ("purple", "red", "blue", "green"):
+            save(
+                render_usage(snapshot, now, activity, theme=theme, anime_color=color, language=language),
+                f"{theme}-{color}{suffix}.png",
+            )
+        save_anime_animation(
+            render_usage_frames(snapshot, now, activity, theme=theme, language=language), f"{theme}-demo{suffix}.gif"
+        )
+        single_window = UsageSnapshot(plan_type="pro", windows=(snapshot.windows[1],))
+        if theme in ("anime-pixel", "anime-pixel-detail"):
+            save_anime_animation(
+                render_usage_frames(
+                    single_window, now, activity, theme=theme, anime_color="green", language=language
+                ),
+                f"{theme}-green-pro-demo{suffix}.gif",
+            )
+        save(
+            render_usage(single_window, now, activity, theme=theme, anime_color="purple", language=language),
+            f"{theme}-single-window{suffix}.png",
+        )
+        save(
+            render_reset_credits(snapshot, activity, theme=theme, anime_color="purple", now=now, language=language),
+            f"{theme}-resets{suffix}.png",
+        )
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--language", choices=("en", "es", "all"), default="all")
+    selected_language = parser.parse_args().language
+    languages = ("en", "es") if selected_language == "all" else (selected_language,)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     now = datetime(2026, 9, 29, 12, 0).astimezone()
     snapshot = UsageSnapshot(
@@ -99,35 +137,8 @@ def main() -> None:
     )
     activity = CodexActivity(working=True, hooks_installed=True)
 
-    for theme in ("neon", "pixel-art"):
-        save(render_usage(snapshot, now, activity, theme=theme), f"{theme}.png")
-        save(render_reset_credits(snapshot, activity, theme=theme, now=now), f"{theme}-resets.png")
-
-    for theme in ("anime", "anime-pixel", "anime-pixel-chibi"):
-        for color in ("purple", "red", "blue", "green"):
-            save(
-                render_usage(snapshot, now, activity, theme=theme, anime_color=color),
-                f"{theme}-{color}.png",
-            )
-        save_anime_animation(
-            render_usage_frames(snapshot, now, activity, theme=theme), f"{theme}-demo.gif"
-        )
-        single_window = UsageSnapshot(plan_type="pro", windows=(snapshot.windows[1],))
-        if theme == "anime-pixel":
-            save_anime_animation(
-                render_usage_frames(
-                    single_window, now, activity, theme=theme, anime_color="green"
-                ),
-                "anime-pixel-green-pro-demo.gif",
-            )
-        save(
-            render_usage(single_window, now, activity, theme=theme, anime_color="purple"),
-            f"{theme}-single-window.png",
-        )
-        save(
-            render_reset_credits(snapshot, activity, theme=theme, anime_color="purple", now=now),
-            f"{theme}-resets.png",
-        )
+    for language in languages:
+        save_minitoo_gallery(snapshot, now, activity, language)
 
     default_usage_frames = [
         *(render_timebox_working(color="cyan", animation_frame=frame) for frame in range(8)),

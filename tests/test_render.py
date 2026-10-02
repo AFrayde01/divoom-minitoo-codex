@@ -30,8 +30,8 @@ class DisplayTests(unittest.TestCase):
         for theme in ("anime", "anime-pixel", "anime-pixel-chibi"):
             boxes = {
                 "anime": ((9, 33, 27, 49), (38, 27, 63, 44)),
-                "anime-pixel": ((25, 31, 47, 44), (52, 38, 69, 51)),
-                "anime-pixel-chibi": ((20, 38, 42, 55), (54, 35, 71, 53)),
+            "anime-pixel": ((25, 36, 46, 48), (55, 39, 72, 53), (40, 60, 56, 67)),
+            "anime-pixel-chibi": ((20, 38, 42, 55), (54, 35, 71, 53), (41, 61, 56, 69)),
             }[theme]
             for color in ANIME_PALETTES:
                 frames = render_usage_frames(self.snapshot, self.now, activity=self.activity, theme=theme, anime_color=color)
@@ -62,10 +62,12 @@ class DisplayTests(unittest.TestCase):
                     region = image.crop((24, 18, 55, 21))
                     self.assertEqual(len(region.getcolors(region.width * region.height)), 1)
 
-    def test_runtime_pixel_portraits_use_at_most_sixteen_colors(self):
+    def test_runtime_pixel_portraits_are_native_rgb_frames(self):
         assets = Path(__file__).resolve().parents[1] / "src/divoom_minitoo_codex/assets"
         for name in ("anime_pixel_portrait", "anime_pixel_chibi_portrait"):
             for suffix in ("", "_blink"):
                 with Image.open(assets / f"{name}{suffix}.png") as image:
                     self.assertEqual(image.size, (78, 78))
-                    self.assertLessEqual(len(image.getcolors(78 * 78)), 16)
+                    self.assertEqual(image.mode, "RGB")
+                    if name == "anime_pixel_chibi_portrait":
+                        self.assertLessEqual(len(image.getcolors(78 * 78)), 16)

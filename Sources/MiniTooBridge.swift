@@ -6,6 +6,8 @@ private struct BridgeRequest: Decodable {
     let authToken: String?
     let framesBase64: [String]
     let speedMs: UInt16
+    let diagnosticCodec: String?
+    let frameEncoding: String?
 }
 
 private final class LocalConnectionState {
@@ -183,7 +185,11 @@ private final class MiniTooBridge {
         }
         listener?.stateUpdateHandler = { state in
             if case .ready = state {
+                #if MINITOO_RGB_DIAGNOSTIC || MINITOO_SQUARE_JPEG_DIAGNOSTIC
                 fputs("MiniToo bridge: authenticated local listener ready on port \(listenerPort).\n", stderr)
+                #else
+                fputs("MiniToo bridge: authenticated local listener ready on port \(listenerPort). RGB888/Zstandard supported.\n", stderr)
+                #endif
             } else if case .failed(let error) = state {
                 fputs("MiniToo bridge listener failed: \(error)\n", stderr)
                 exit(1)
@@ -286,20 +292,58 @@ private final class MiniTooBridge {
         state.deadline?.cancel()
         do {
             let request = try decodeAuthenticatedRequest(data)
-            guard (1...8).contains(request.framesBase64.count) else {
-                throw bridgeError("MiniToo supports between 1 and 8 image frames.")
+            #if MINITOO_RGB_DIAGNOSTIC
+            guard request.frameEncoding == nil,
+                  request.diagnosticCodec == "rgb888-zstd", request.framesBase64.count == 1 else {
+                throw bridgeError("This diagnostic bridge requires one 128x128 RGB888 frame.")
             }
-            let frames = try request.framesBase64.map { encoded -> Data in
-                guard let jpeg = Data(base64Encoded: encoded), jpeg.count < 256 * 1024 else {
-                    throw bridgeError("Invalid or oversized JPEG frame.")
+            #elseif MINITOO_SQUARE_JPEG_DIAGNOSTIC
+            guard request.frameEncoding == nil,
+                  request.diagnosticCodec == "jpeg128", request.framesBase64.count == 1 else {
+                throw bridgeError("This diagnostic bridge requires one 128x128 JPEG frame.")
+            }
+            #else
+            guard request.diagnosticCodec == nil else {
+                throw bridgeError("Codec comparisons require their separately compiled diagnostic bridge.")
+            }
+            #endif
+            let frames: [Data]
+            let rgbPayload: Data?
+            if request.frameEncoding == "rgb-zstd" {
+                guard request.framesBase64.count == 1,
+                      let payload = Data(base64Encoded: request.framesBase64[0]), payload.count < 384 * 1024 else {
+                    throw bridgeError("Invalid or oversized RGB image payload.")
                 }
-                return jpeg
+                try validateRGBPayload(payload, speedMs: request.speedMs)
+                frames = []
+                rgbPayload = payload
+            } else {
+                guard request.frameEncoding == nil else {
+                    throw bridgeError("Unsupported MiniToo image encoding.")
+                }
+                guard (1...8).contains(request.framesBase64.count) else {
+                    throw bridgeError("MiniToo supports between 1 and 8 image frames.")
+                }
+                frames = try request.framesBase64.map { encoded -> Data in
+                    guard let frame = Data(base64Encoded: encoded), frame.count < 256 * 1024 else {
+                        throw bridgeError("Invalid or oversized image frame.")
+                    }
+                    #if MINITOO_RGB_DIAGNOSTIC
+                    guard frame.count == 128 * 128 * 3 else {
+                        throw bridgeError("The RGB diagnostic frame must contain exactly 49152 bytes.")
+                    }
+                    #endif
+                    return frame
+                }
+                rgbPayload = nil
             }
             transferQueue.async {
                 guard self.workQueue.sync(execute: { self.connections[ObjectIdentifier(connection)] != nil }) else { return }
                 do {
-                    self.log("transferring \(frames.count) frame(s) over Bluetooth")
-                    self.reply(connection, try self.send(frames: frames, speedMs: request.speedMs))
+                    self.log(rgbPayload == nil
+                        ? "transferring \(frames.count) frame(s) over Bluetooth"
+                        : "transferring RGB888/Zstandard animation over Bluetooth")
+                    self.reply(connection, try self.send(frames: frames, speedMs: request.speedMs, rgbPayload: rgbPayload))
                 } catch {
                     self.reply(connection, BridgeResponse(ok: false, message: error.localizedDescription, chunks: nil, acknowledged: nil))
                 }
@@ -327,11 +371,11 @@ private final class MiniTooBridge {
         }
     }
 
-    private func send(frames: [Data], speedMs: UInt16) throws -> BridgeResponse {
+    private func send(frames: [Data], speedMs: UInt16, rgbPayload: Data? = nil) throws -> BridgeResponse {
         guard let channel, channel.isOpen() else {
             throw bridgeError("Bluetooth connection to MiniToo is closed.")
         }
-        let payload = encodePayload(frames: frames, speedMs: speedMs)
+        let payload = rgbPayload ?? encodePayload(frames: frames, speedMs: speedMs)
         let chunks = makeChunks(payload)
         log("prepared \(payload.count) payload bytes in \(chunks.count) chunk(s)")
         delegate.reset()
@@ -440,16 +484,96 @@ private final class MiniTooBridge {
     }
 
     private func encodePayload(frames: [Data], speedMs: UInt16) -> Data {
+        #if MINITOO_RGB_DIAGNOSTIC
+        // Diagnostic only: one 128x128 RGB888 frame, matching the documented
+        // Android 0x25 route. A Zstd raw block preserves every byte and needs
+        // no external compression library. Its explicit window is 128 KiB.
+        let rgb = frames[0] // Size and frame count validated before transfer.
+        var zstd = Data([0x28, 0xB5, 0x2F, 0xFD, 0x40, 0x38])
+        zstd.append(littleEndian(UInt16(rgb.count - 256)))
+        let blockHeader = (UInt32(rgb.count) << 3) | 1 // Last block; raw type.
+        zstd.append(contentsOf: (0..<3).map { UInt8((blockHeader >> (UInt32($0) * 8)) & 0xFF) })
+        zstd.append(rgb)
+        var payload = Data([0x25, 0x01])
+        payload.append(bigEndian(speedMs))
+        payload.append(contentsOf: [0x08, 0x08])
+        payload.append(bigEndian(UInt32(zstd.count)))
+        payload.append(zstd)
+        return payload
+        #else
         // Each frame is a 160x128 JPEG in the MiniToo's 8x10 tile grid.
         var payload = Data([0x23, UInt8(frames.count)])
         payload.append(bigEndian(speedMs))
+        #if MINITOO_SQUARE_JPEG_DIAGNOSTIC
+        payload.append(contentsOf: [0x08, 0x08])
+        #else
         payload.append(contentsOf: [0x08, 0x0A])
+        #endif
         for jpeg in frames {
             payload.append(0x01)
             payload.append(bigEndian(UInt32(jpeg.count)))
             payload.append(jpeg)
         }
         return payload
+        #endif
+    }
+
+    private func validateRGBPayload(_ payload: Data, speedMs: UInt16) throws {
+        let bytes = Array(payload)
+        guard bytes.count >= 18, bytes[0] == 0x25, (1...8).contains(Int(bytes[1])),
+              bytes[4] == 8, bytes[5] == 10,
+              UInt16(bytes[2]) * 256 + UInt16(bytes[3]) == speedMs else {
+            throw bridgeError("RGB payload must contain 1–8 native 160x128 frames with the requested speed.")
+        }
+        let length = (6..<10).reduce(UInt32(0)) { ($0 << 8) | UInt32(bytes[$1]) }
+        guard Int(length) == bytes.count - 10 else {
+            throw bridgeError("RGB payload length does not match its Zstandard stream.")
+        }
+        let zstd = Array(bytes.dropFirst(10))
+        guard zstd.count >= 8, Array(zstd.prefix(4)) == [0x28, 0xB5, 0x2F, 0xFD],
+              zstd[4] & 0x1B == 0 else {
+            throw bridgeError("RGB payload requires a standard Zstandard frame without a dictionary.")
+        }
+        let descriptor = zstd[4]
+        let singleSegment = descriptor & 0x20 != 0
+        var offset = 5
+        var window: UInt64 = 0
+        if !singleSegment {
+            guard offset < zstd.count else { throw bridgeError("Truncated Zstandard window.") }
+            let base = UInt64(1) << (10 + UInt64(zstd[offset] >> 3))
+            window = base + (base / 8) * UInt64(zstd[offset] & 7)
+            offset += 1
+        }
+        let sizeBytes = [singleSegment ? 1 : 0, 2, 4, 8][Int(descriptor >> 6)]
+        guard sizeBytes > 0, offset + sizeBytes <= zstd.count else {
+            throw bridgeError("RGB Zstandard stream must declare its decompressed size.")
+        }
+        var contentSize = (0..<sizeBytes).reduce(UInt64(0)) {
+            $0 | (UInt64(zstd[offset + $1]) << (UInt64($1) * 8))
+        }
+        if sizeBytes == 2 { contentSize += 256 }
+        offset += sizeBytes
+        if singleSegment { window = contentSize }
+        guard contentSize == UInt64(bytes[1]) * 160 * 128 * 3,
+              window > 0, window <= 128 * 1024 else {
+            throw bridgeError("RGB Zstandard size must match the frames and its window must not exceed 128 KiB.")
+        }
+        while true {
+            guard offset + 3 <= zstd.count else { throw bridgeError("Truncated Zstandard block header.") }
+            let header = Int(zstd[offset]) | (Int(zstd[offset + 1]) << 8) | (Int(zstd[offset + 2]) << 16)
+            offset += 3
+            let type = (header >> 1) & 3
+            let size = header >> 3
+            let storedSize = type == 1 ? 1 : size
+            guard type != 3, UInt64(size) <= min(window, 128 * 1024),
+                  offset + storedSize <= zstd.count else {
+                throw bridgeError("Invalid or truncated Zstandard block.")
+            }
+            offset += storedSize
+            if header & 1 != 0 { break }
+        }
+        if descriptor & 4 != 0 { offset += 4 }
+        guard offset == zstd.count else { throw bridgeError("Unexpected bytes after the RGB Zstandard frame.") }
     }
 
     private func makeChunks(_ payload: Data) -> [Data] {

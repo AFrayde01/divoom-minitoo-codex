@@ -15,7 +15,11 @@ from .appserver import AppServerError, CodexAppServer
 from .activity import read_activity
 from .bridge import MiniTooBridge, MiniTooError
 from .diagnostics import PrivateRotatingFileHandler, default_log_path, private_log_directory, secure_existing_log
+from .discovery import DiscoveryError, discover_devices, normalize_address
+from .preferences import load_preferences, save_preferences, load_language, save_language
+from .i18n import LANGUAGES, tr, translate_error
 from .terminal import TerminalUI
+from .minitoo_rgb import encode_rgb_animation
 from .render import (
     ANIME_PALETTES,
     PORTRAIT_THEMES,
@@ -44,86 +48,246 @@ def _default_bridge(device: str) -> Path:
     return Path(__file__).resolve().parents[2] / "build" / executable
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+class _LocalizedParser(argparse.ArgumentParser):
+    def __init__(self, *args: object, language: str = "en", **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.language = language
+        if language == "es":
+            self._positionals.title = "argumentos posicionales"
+            self._optionals.title = "opciones"
+            self._actions[0].help = tr("show this help message and exit", language)
+
+    def format_usage(self) -> str:
+        return super().format_usage().replace("usage: ", "uso: ", 1) if self.language == "es" else super().format_usage()
+
+    def format_help(self) -> str:
+        return super().format_help().replace("usage: ", "uso: ", 1) if self.language == "es" else super().format_help()
+
+    def error(self, message: str) -> None:
+        if self.language == "es":
+            message = message.replace("unrecognized arguments:", "argumentos no reconocidos:")
+            message = message.replace("argument ", "argumento ", 1).replace("invalid choice:", "opción no válida:")
+            message = message.replace("choose from", "elige entre").replace("expected one argument", "requiere un valor")
+            message = message.replace("invalid int value:", "entero no válido:")
+        super().error(message)
+
+
+def _parser(language: str = "en") -> argparse.ArgumentParser:
+    t = lambda text, **values: tr(text, language, **values)
+    parser = _LocalizedParser(
+        language=language,
         prog="codex-minitoo",
-        description="Display Codex usage limits on a Divoom MiniToo or TimeBox Mini.",
+        description=t("Display Codex usage limits on a Divoom MiniToo or TimeBox Mini."),
     )
+    parser.add_argument("command", nargs="?", choices=("start",), default="start", help=t("Start the monitor (default)."))
+    parser.add_argument("--language", "--lang", choices=tuple(LANGUAGES), default=None,
+                        help=t("CLI and display language: en or es. Defaults to the saved choice, initially English."))
     parser.add_argument(
         "--address",
         default=os.environ.get("MINITOO_ADDRESS"),
-        help="Divoom Bluetooth MAC address (or set MINITOO_ADDRESS).",
+        help=t("Optional Bluetooth MAC address (or MINITOO_ADDRESS); otherwise detect paired Divoom speakers."),
     )
     parser.add_argument(
         "--codex-bin",
         default=os.environ.get("CODEX_BIN", "codex"),
-        help="Path to the Codex executable (or set CODEX_BIN).",
+        help=t("Path to the Codex executable (or set CODEX_BIN)."),
     )
     parser.add_argument(
         "--codex-home",
         type=Path,
-        help="Codex profile whose sign-in and usage limits should be queried.",
+        help=t("Codex profile whose sign-in and usage limits should be queried."),
     )
     parser.add_argument(
         "--device",
         choices=("minitoo", "timebox-mini"),
-        default="minitoo",
-        help="Divoom model: minitoo (default) or timebox-mini.",
+        default=None,
+        help=t("Restrict detection to minitoo or timebox-mini. An explicit address without a model uses MiniToo."),
     )
     parser.add_argument("--bridge", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=None, help=argparse.SUPPRESS)
-    parser.add_argument("--interval", type=int, default=60, help="Refresh interval in seconds (default: 60).")
+    parser.add_argument("--interval", type=int, default=60, help=t("Refresh interval in seconds (default: 60)."))
+    parser.add_argument(
+        "--encoding", choices=("jpeg", "rgb"), default="rgb",
+        help=t("MiniToo image encoding: lossless rgb/Zstandard (default) or jpeg. TimeBox Mini always uses RGB444."),
+    )
     parser.add_argument(
         "--theme",
         choices=tuple(THEMES),
-        default="neon",
-        help="MiniToo theme: neon, pixel-art, anime, anime-pixel, or anime-pixel-chibi. TimeBox Mini always uses its compact default layout.",
+        default=None,
+        help=t("MiniToo theme: {themes}. Defaults to the saved choice, initially neon. TimeBox Mini uses its compact layout.", themes=", ".join(THEMES)),
     )
     parser.add_argument(
         "--color",
         "-color",
         choices=tuple(dict.fromkeys((*TIMEBOX_COLORS, *ANIME_PALETTES))),
         default=None,
-        help="TimeBox Mini accent (cyan by default, purple, red, blue, green) or MiniToo portrait theme color.",
+        help=t("Saved color or chosen palette. First use: cyan for TimeBox Mini, purple for MiniToo portraits."),
     )
-    parser.add_argument("--once", action="store_true", help="Refresh the display once and exit.")
-    parser.add_argument("--preview", type=Path, help="Save a preview image without using Bluetooth.")
+    parser.add_argument("--once", action="store_true", help=t("Refresh the display once and exit."))
+    parser.add_argument("--preview", type=Path, help=t("Save a preview image without using Bluetooth."))
+    parser.add_argument(
+        "--no-prompt", action="store_true",
+        help=t("Start without the selection menus, using explicit options or saved choices."),
+    )
+    parser.add_argument(
+        "--sent", choices=("compact", "detailed"), default="compact",
+        help=t("Transfer output: compact updates one terminal row (default); detailed prints every sent update."),
+    )
     parser.add_argument("--activity-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument(
         "--log-file", type=Path,
-        help="Diagnostic log path (default: ~/Library/Logs/divoom-minitoo-codex/<device>-<port>.log; private, rotates at 1 MiB).",
+        help=t("Diagnostic log path (default: ~/Library/Logs/divoom-minitoo-codex/<device>-<port>.log; private, rotates at 1 MiB)."),
     )
     return parser
 
 
-def main() -> int:
-    args = _parser().parse_args()
+def _resolve_device(args: argparse.Namespace, terminal: TerminalUI) -> None:
+    t = terminal.tr
+    if args.preview:
+        args.device = args.device or "minitoo"
+        return
+    if args.address:
+        args.address = normalize_address(args.address, args.language)
+        args.device = args.device or "minitoo"
+        return
+    prompt = terminal.can_prompt and not args.no_prompt and not args.once
+    while True:
+        terminal.step(t("Finding paired Divoom speakers…"))
+        try:
+            devices = discover_devices(language=args.language)
+            if args.device is not None:
+                devices = [device for device in devices if device.model == args.device]
+        except DiscoveryError as exc:
+            if not prompt:
+                raise
+            terminal.report(str(exc), error=True)
+            devices = []
+        if devices:
+            if len(devices) > 1:
+                if not prompt:
+                    raise DiscoveryError(
+                        t("Several Divoom speakers are paired. Run ./start interactively to choose, or specify --device / --address.")
+                    )
+                options = tuple(
+                    (device.address, f"{device.name} · {t('connected' if device.connected else 'paired, not connected')}")
+                    for device in devices
+                )
+                address = terminal.choose(t("Divoom · speaker"), options, devices[0].address)
+                selected = next(device for device in devices if device.address == address)
+            else:
+                selected = devices[0]
+                terminal.report(t("Detected {name} ({state}).", name=selected.name, state=t("connected" if selected.connected else "paired, not connected")))
+            args.address = selected.address
+            args.device = selected.model
+            return
+        message = t(
+            "No supported paired Divoom speaker found{model}. Turn it on, enable Bluetooth and pair it in macOS Bluetooth settings.",
+            model=t(" for {device}", device=args.device) if args.device is not None else "",
+        )
+        if not prompt:
+            raise DiscoveryError(message + t(" You can also provide --address and --device."))
+        terminal.report(message)
+        action = terminal.choose(
+            t("Connection · next step"),
+            (("retry", t("Refresh paired speakers")), ("manual", t("Enter a Bluetooth address"))),
+            "retry",
+        )
+        if action == "manual":
+            if args.device is None:
+                args.device = terminal.choose(
+                    t("Divoom · model"),
+                    (("minitoo", "MiniToo TFT"), ("timebox-mini", "TimeBox Mini 11 × 11")),
+                    "minitoo",
+                )
+            while True:
+                try:
+                    args.address = normalize_address(terminal.ask(t("Bluetooth address")), args.language)
+                    return
+                except DiscoveryError as exc:
+                    terminal.report(str(exc), error=True)
+
+
+def _configure_display(args: argparse.Namespace, terminal: TerminalUI) -> None:
+    t = terminal.tr
+    try:
+        saved = load_preferences(args.device)
+    except (OSError, ValueError) as exc:
+        terminal.report(t("Could not read saved display choices; using defaults. {detail}", detail=exc), error=True)
+        saved = {}
+    prompt = terminal.can_prompt and not args.no_prompt and not args.once and not args.preview
+
     if args.device == "timebox-mini":
-        if args.theme != "neon":
-            print(
-                f"TimeBox Mini supports only its compact default theme; ignoring --theme {args.theme}.",
-                file=sys.stderr,
+        if args.theme is not None and args.theme != "neon":
+            terminal.report(
+                t("TimeBox Mini supports only its compact default theme; ignoring --theme {theme}.", theme=args.theme),
+                error=True,
             )
-        if args.color is not None and args.color not in TIMEBOX_COLORS:
-            print(
-                f"TimeBox Mini does not support --color {args.color}; using the default cyan accent.",
-                file=sys.stderr,
+        theme = "neon"
+        colors = tuple(TIMEBOX_COLORS)
+        default_color = "cyan"
+    else:
+        theme = args.theme or saved.get("theme", "neon")
+        if theme not in THEMES:
+            theme = "neon"
+        if prompt and args.theme is None:
+            theme = terminal.choose(t("MiniToo · theme"), tuple((value, t(label)) for value, label in THEMES.items()), theme)
+        colors = tuple(ANIME_PALETTES) if theme in PORTRAIT_THEMES else ()
+        default_color = "purple"
+
+    color = args.color if args.color is not None else saved.get("color")
+    if color is not None and color not in colors:
+        if args.color is not None:
+            fallback = t("the default {color} palette", color=t(default_color)) if colors else t("its default colors")
+            theme_name = theme if args.device == "minitoo" else "TimeBox Mini"
+            terminal.report(
+                t("The {theme} theme does not support --color {color}; using {fallback}.", theme=theme_name, color=color, fallback=fallback),
+                error=True,
             )
-            args.color = None
-    elif args.color is not None and args.theme not in PORTRAIT_THEMES:
-        print(f"The {args.theme} theme does not support --color; using its default colors.", file=sys.stderr)
-        args.color = None
-    elif args.color is not None and args.color not in ANIME_PALETTES:
-        print(f"The {args.theme} theme does not support --color {args.color}; using the default purple palette.", file=sys.stderr)
-        args.color = None
+        color = None
+    if colors:
+        color = color or default_color
+        if prompt and args.color is None:
+            name = "TimeBox Mini" if args.device == "timebox-mini" else "MiniToo"
+            color = terminal.choose(t("{name} · color", name=name), tuple((value, t(value)) for value in colors), color)
+    elif prompt and args.theme is None:
+        terminal.report(t("The {theme} theme uses its own fixed palette.", theme=theme))
+    args.theme = theme
+    args.color = color
+    if not args.once and not args.preview:
+        try:
+            save_preferences(args.device, theme=theme, color=color)
+        except OSError as exc:
+            terminal.report(t("Could not save display choices; this monitor will still run. {detail}", detail=exc), error=True)
+
+
+def main() -> int:
+    # Resolve language before parsing so --help and validation use it too.
+    language_error = None
+    try:
+        saved_language = load_language()
+    except (OSError, ValueError) as exc:
+        saved_language, language_error = "en", exc
+    parser_language = saved_language
+    for index, argument in enumerate(sys.argv[1:], start=1):
+        if argument == "--":
+            break
+        if argument in ("--language", "--lang") and index + 1 < len(sys.argv):
+            value = sys.argv[index + 1]
+        elif argument.startswith(("--language=", "--lang=")):
+            value = argument.split("=", 1)[1]
+        else:
+            continue
+        if value in LANGUAGES:
+            parser_language = value
+    args = _parser(parser_language).parse_args()
+    explicit_language = args.language is not None
+    args.language = args.language or saved_language
+    t = lambda text, **values: tr(text, args.language, **values)
     if args.interval < 10:
-        print("The minimum refresh interval is 10 seconds.", file=sys.stderr)
-        return 2
-    if not args.preview and not args.address:
-        print("Provide --address XX:XX:XX:XX:XX:XX or set MINITOO_ADDRESS.", file=sys.stderr)
+        print(t("The minimum refresh interval is 10 seconds."), file=sys.stderr)
         return 2
     if args.port is not None and not 1 <= args.port <= 65_535:
-        print("The local bridge port must be between 1 and 65535.", file=sys.stderr)
+        print(t("The local bridge port must be between 1 and 65535."), file=sys.stderr)
         return 2
 
     bridge: MiniTooBridge | None = None
@@ -132,14 +296,35 @@ def main() -> int:
     display_failures = 0
     logger: logging.Logger | None = None
     log_handler: PrivateRotatingFileHandler | None = None
-    terminal = TerminalUI()
+    terminal = TerminalUI(sent=args.sent, language=args.language)
 
-    def report(message: str, *, error: bool = False) -> None:
-        terminal.report(message, error=error)
+    def report(
+        message: str,
+        *,
+        error: bool = False,
+        update: bool = False,
+        compact_message: str | None = None,
+    ) -> None:
+        if update:
+            terminal.update(message, compact_message=compact_message)
+        else:
+            terminal.report(message, error=error)
         if logger is not None:
             logger.log(logging.ERROR if error else logging.INFO, message)
 
     try:
+        if language_error is not None:
+            report(t("Could not read saved language. {detail}", detail=language_error), error=True)
+        if terminal.can_prompt and not args.no_prompt and not args.once and not args.preview and not explicit_language:
+            args.language = terminal.choose("Language / Idioma", tuple(LANGUAGES.items()), args.language)
+            terminal.language = args.language
+        if not args.once and not args.preview:
+            try:
+                save_language(args.language)
+            except OSError as exc:
+                report(t("Could not save language; this monitor will still run. {detail}", detail=exc), error=True)
+        _resolve_device(args, terminal)
+        _configure_display(args, terminal)
         if not args.preview:
             default_port = 40585 if args.device == "timebox-mini" else 40584
             bridge_port = args.port if args.port is not None else default_port
@@ -161,11 +346,12 @@ def main() -> int:
                 color=args.color or ("cyan" if args.device == "timebox-mini" else "purple" if args.theme in PORTRAIT_THEMES else "default"),
                 interval=args.interval,
                 log_path=str(log_path),
+                encoding="RGB444" if args.device == "timebox-mini" else "RGB888 / Zstandard" if args.encoding == "rgb" else "JPEG",
             )
             if not terminal.interactive:
-                report(f"Diagnostic log: {log_path}")
+                report(t("Diagnostic log: {path}", path=log_path))
             logger.info("Monitor starting: device=%s theme=%s port=%s", args.device, args.theme, bridge_port)
-            terminal.step("Connecting to Codex and reading account usage…")
+            terminal.step(t("Connecting to Codex and reading account usage…"))
         with CodexAppServer(args.codex_bin, codex_home=args.codex_home) as codex:
             if not args.preview:
                 bridge_path = args.bridge or _default_bridge(args.device)
@@ -178,12 +364,15 @@ def main() -> int:
                     display_name="TimeBox Mini" if args.device == "timebox-mini" else "MiniToo",
                     logger=logger,
                 )
+                if args.device == "minitoo" and args.encoding == "rgb":
+                    bridge.frame_encoding = "rgb-zstd"
+                    report(t("MiniToo encoding: lossless RGB888/Zstandard at 160x128."))
                 device_name = "TimeBox Mini" if args.device == "timebox-mini" else "MiniToo"
-                report(f"Monitoring {device_name} at {args.address}; reading Codex usage every {args.interval}s.")
+                report(t("Monitoring {device} at {address}; reading Codex usage every {interval}s.", device=device_name, address=args.address, interval=args.interval))
 
             snapshot = codex.read_usage()
             if not args.preview:
-                terminal.step("Usage received. Connecting to the authenticated Bluetooth bridge…")
+                terminal.step(t("Usage received. Connecting to the authenticated Bluetooth bridge…"))
             next_usage_read = time.monotonic() + args.interval
             next_reset_screen = time.monotonic() + RESET_CREDITS_SCREEN_INTERVAL_SECONDS
             reset_screen_until: float | None = None
@@ -284,6 +473,7 @@ def main() -> int:
                                 activity,
                                 theme=args.theme,
                                 anime_color=args.color or "purple",
+                                language=args.language,
                             ),)
                     elif args.device == "timebox-mini" and timebox_view == "working-animation":
                         images = (render_timebox_working(
@@ -304,22 +494,34 @@ def main() -> int:
                             activity=activity,
                             theme=args.theme,
                             anime_color=args.color or "purple",
+                            language=args.language,
                         )
                     if args.preview:
                         args.preview.parent.mkdir(parents=True, exist_ok=True)
                         images[0].save(args.preview)
-                        print(f"Preview saved to {args.preview}")
+                        print(t("Preview saved to {path}", path=args.preview))
                         return 0
 
+                    if len(images) > 1:
+                        if args.theme in PORTRAIT_THEMES:
+                            animation_speed = 600
+                        elif args.theme == "pixel-art" and not activity.working:
+                            animation_speed = 800
+                        else:
+                            animation_speed = 400
+                    else:
+                        animation_speed = 1000 if args.device == "minitoo" and args.encoding == "rgb" else 0
                     if args.device == "timebox-mini":
                         frames = [encode_timebox_rgb444(images[0])]
+                    elif args.encoding == "rgb":
+                        frames = [encode_rgb_animation(images, speed_ms=animation_speed)]
                     else:
-                        jpeg_quality = {"anime": 92, "pixel-art": 98, "anime-pixel": 98, "anime-pixel-chibi": 98}.get(args.theme, 88)
+                        jpeg_quality = {"anime": 92, "pixel-art": 98, "anime-pixel": 98, "anime-pixel-chibi": 98, "anime-pixel-detail": 98}.get(args.theme, 88)
                         frames = [
                             encode_for_minitoo(
                                 image,
                                 quality=jpeg_quality,
-                                pixel_art=args.theme in ("pixel-art", "anime-pixel", "anime-pixel-chibi"),
+                                pixel_art=args.theme == "pixel-art" or (args.theme in PORTRAIT_THEMES and args.theme != "anime"),
                                 preserve_detail=args.theme in PORTRAIT_THEMES,
                             )
                             for image in images
@@ -329,15 +531,6 @@ def main() -> int:
                         next_display_retry is None or loop_time >= next_display_retry
                     ):
                         assert bridge is not None
-                        if len(frames) > 1:
-                            if args.theme in PORTRAIT_THEMES:
-                                animation_speed = 600
-                            elif args.theme == "pixel-art" and not activity.working:
-                                animation_speed = 800
-                            else:
-                                animation_speed = 400
-                        else:
-                            animation_speed = 0
                         try:
                             result = bridge.send_frames_with_recovery(
                                 frames,
@@ -353,7 +546,7 @@ def main() -> int:
                             # A failed transfer can replace the old screen with
                             # loading; no cached digest is now safe to reuse.
                             previous_digest = None
-                            report(f"{exc} Retrying the current screen in {retry_delay}s.", error=True)
+                            report(t("{detail} Retrying the current screen in {seconds}s.", detail=translate_error(str(exc), args.language), seconds=retry_delay), error=True)
                             previous_activity_state = activity_state
                             previous_screen_mode = screen_mode
                             previous_timebox_view = timebox_view
@@ -361,26 +554,30 @@ def main() -> int:
                             continue
                         next_display_retry = None
                         display_failures = 0
-                        animation_only = (
-                            timebox_animation_changed
-                            and not refreshed
-                            and activity_state == previous_activity_state
-                            and not screen_changed
-                            and not timebox_view_changed
+                        activity_label = t("working" if activity.working else "idle" if activity.hooks_installed else "hooks not installed")
+                        update_label = t("Display updated after reconnect" if result.get("reconnected") else "Display updated")
+                        if screen_mode == "reset-credits":
+                            view_label = t("reset credits")
+                        elif args.device == "timebox-mini" and timebox_view == "working-animation":
+                            view_label = t("working animation")
+                        elif args.device == "timebox-mini" and timebox_view == "nearest-percent":
+                            view_label = t("remaining percentage")
+                        else:
+                            view_label = t("usage")
+                        transfer_message = t(str(result.get("message", "ok")))
+                        compact_usage = " / ".join(
+                            f"{window.label} {100 - window.used_percent}%" for window in snapshot.windows
                         )
-                        if not animation_only:
-                            activity_label = "working" if activity.working else "idle" if activity.hooks_installed else "hooks not installed"
-                            if result.get("reconnected"):
-                                update_label = "Display updated after reconnect"
-                            else:
-                                update_label = "Display updated"
-                            report(
-                                update_label + ": "
-                                + ", ".join(f"{window.label} {100 - window.used_percent}% left" for window in snapshot.windows)
-                                + f"; Codex {activity_label}"
-                                + ("; showing reset credits" if screen_mode == "reset-credits" else "; showing usage")
-                                + f" ({result.get('message', 'ok')})."
-                            )
+                        compact_usage = t("{usage} left", usage=compact_usage) if compact_usage else t("usage unavailable")
+                        compact_transfer = t("{message}, reconnected", message=transfer_message) if result.get("reconnected") else transfer_message
+                        report(
+                            t("{update}: {usage}; Codex {activity}; showing {view} ({transfer}).",
+                              update=update_label,
+                              usage=", ".join(t("{label} {percent}% left", label=window.label, percent=100 - window.used_percent) for window in snapshot.windows),
+                              activity=activity_label, view=view_label, transfer=transfer_message),
+                            update=True,
+                            compact_message=f"{compact_usage} | Codex {activity_label} | {view_label} | {compact_transfer}",
+                        )
                         previous_digest = digest
                     previous_activity_state = activity_state
                     previous_screen_mode = screen_mode
@@ -392,17 +589,21 @@ def main() -> int:
                 if remaining > 0:
                     # Check activity each second; read usage on the configured interval.
                     time.sleep(min(1, remaining))
-    except (AppServerError, MiniTooError, OSError) as exc:
-        report(str(exc), error=True)
+    except (AppServerError, MiniTooError, DiscoveryError, OSError) as exc:
+        report(translate_error(str(exc), args.language), error=True)
         return 1
+    except EOFError:
+        report(t("Selection input closed. Use --no-prompt to start with saved choices."), error=True)
+        return 2
     except KeyboardInterrupt:
-        report("\nMonitor stopped.")
+        report(t("Monitor stopped."))
         return 0
     finally:
         if bridge is not None:
             bridge.close()
         if log_handler is not None:
             log_handler.close()
+        terminal.finish()
 
 
 if __name__ == "__main__":

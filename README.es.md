@@ -4,7 +4,7 @@
 
 Muestra el uso de Codex, los horarios de recarga, la actividad y los créditos de reset disponibles en una Divoom MiniToo o TimeBox Mini. El monitor consulta la cuenta iniciada mediante Codex App Server local. MiniToo recibe un panel de 160 × 128 píxeles; TimeBox Mini muestra una pantalla compacta para su matriz LED de 11 × 11.
 
-Esta versión funciona en **macOS**. MiniToo incluye cinco temas: **neón**, **pixel art**, **anime**, **anime-pixel** (adulto) y **anime-pixel-chibi**. TimeBox Mini usa un diseño compacto para su matriz de 11 × 11, con varios colores de acento opcionales. [Ver los temas](#temas-y-colores).
+Esta versión funciona en **macOS**. MiniToo incluye seis temas: **neón**, **pixel art**, **anime**, **anime-pixel** (adulta con el estilo de dibujo de chibi), **anime-pixel-chibi** y **anime-pixel-detail** (adulta detallada). TimeBox Mini usa un diseño compacto para su matriz de 11 × 11, con varios colores de acento opcionales. [Ver los temas](#temas-y-colores).
 
 ## Requisitos
 
@@ -41,7 +41,11 @@ Si después agregas otro perfil de Codex, instala sus hooks con:
 
 Detén el monitor con `Ctrl+C`, actualiza tu copia del repositorio y ejecuta `./scripts/install.sh` de nuevo. Hay que recompilar **ambos puentes** para usar la autenticación local; un binario antiguo se rechazará con un mensaje de actualización. Reinicia el monitor después. Los hooks existentes conservan su configuración; revisa `/hooks` si Codex solicita confiar en un hook actualizado.
 
-## Cómo encontrar la dirección Bluetooth de Divoom
+La actualización también instala el compresor RGB sin pérdida y reconstruye el puente MiniToo con soporte RGB. **RGB888/Zstandard sin pérdida es ahora el formato predeterminado del MiniToo**, a su resolución nativa de 160 × 128. Ya no necesitas agregar `--encoding rgb`. Usa `--encoding jpeg` para seleccionar JPEG explícitamente. [Guía RGB y prueba de pantalla nativa](docs/MINITOO_RGB.md).
+
+## Cómo encontrar la dirección Bluetooth de Divoom (opcional)
+
+`./start` lee automáticamente las bocinas compatibles emparejadas en macOS, por lo que normalmente no necesitas escribir la dirección. Primero empareja la bocina en los ajustes Bluetooth de macOS. La detección reconoce MiniToo y TimeBox Mini por sus nombres Bluetooth; si cambiaste su nombre o quieres indicarla manualmente, busca su dirección así:
 
 1. Enciende el dispositivo Divoom y enlázalo desde **Configuración del Sistema → Bluetooth**.
 2. Abre **Información del Sistema → Hardware → Bluetooth**, busca MiniToo o TimeBox Mini en la lista y copia su **Address**. También puedes consultar la lista desde Terminal:
@@ -59,94 +63,152 @@ Si MiniToo está conectado como dispositivo de audio Bluetooth, desconecta ese p
 Inicia el monitor continuo con:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo
+./start
 ```
 
-Si omites `--device`, el monitor usa **MiniToo** con el tema **neón**. Para usar TimeBox Mini, agrega `--device timebox-mini`; usará su diseño compacto predeterminado:
+Si macOS tiene una sola Divoom compatible emparejada, se seleccionan automáticamente su dirección y modelo. Si hay varias, escoge la bocina en el menú; las conectadas aparecen primero y MiniToo tiene prioridad cuando el estado de conexión es igual. Estar conectada no garantiza que su canal de imágenes esté libre, ni que una bocina emparejada pero desconectada esté encendida. Después podrás escoger tema y color, con tus últimas opciones preseleccionadas. El primer tema de MiniToo es **neón**. TimeBox Mini usa su diseño compacto y ofrece sus colores de acento.
+
+Para mostrar solo dispositivos TimeBox Mini:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --device timebox-mini
+./start --device timebox-mini
 ```
 
 Deja Terminal abierta mientras se ejecuta; puedes detener el monitor con `Ctrl+C`. Lee el uso al iniciarse y cada 60 segundos, revisa la actividad cada segundo y vuelve a leer el uso cuando termina un turno de Codex. Envía una imagen cuando cambia la pantalla. Los hooks no responden en la conversación de Codex; su estado aparece en la pantalla Divoom.
 
+### Selección inicial y salida de Terminal
+
+- Usa **↑ / ↓** para recorrer idiomas, bocinas, temas y colores, y **Enter** para seleccionar. Los números **1–9** saltan a una opción; **Esc / Q** o **Ctrl+C** cancelan. Presiona Enter directamente para conservar la opción resaltada. Si Terminal no admite el modo de teclas, se usa entrada por número/nombre. Los temas anime comienzan con morado; TimeBox Mini comienza con cian. Neón y el tema pixel art del robot usan paletas fijas.
+- Los valores explícitos de `--language`, `--theme` y `--color` tienen prioridad y omiten sus preguntas respectivas. Las ejecuciones continuas recuerdan tema/color por separado para cada dispositivo y un idioma común.
+- Agrega `--no-prompt` para iniciar directamente con los parámetros o preferencias guardadas. `--once`, `--preview`, la entrada/salida redirigida y `TERM=dumb` también omiten el menú; once/preview no cambian las preferencias guardadas.
+- Sin menú, la detección debe encontrar una sola bocina compatible; si hay varias, especifica `--device` o `--address`. Una dirección explícita (o `MINITOO_ADDRESS`) omite la detección; sin indicar modelo, esa dirección usa MiniToo. La vista previa usa MiniToo por defecto y no lee Bluetooth.
+- Los envíos **actualizan una sola línea de estado** por defecto. Muestra la hora del último envío, cuota restante, actividad y pantalla actual. El texto largo se recorta al ancho de Terminal; los errores y el archivo de diagnóstico conservan los detalles completos.
+- Agrega `--sent detailed` para imprimir una línea completa por cada envío correcto, incluidos los cuadros de animación del TimeBox Mini. La salida redirigida siempre usa líneas de texto simples.
+
+Por ejemplo:
+
+```sh
+./start --no-prompt
+./start --sent detailed
+```
+
+Las preferencias se guardan localmente en `~/Library/Application Support/divoom-minitoo-codex/minitoo.json` o `timebox-mini.json`. Estos archivos privados solo contienen tema y color. El idioma común para CLI/pantalla se guarda en `language.json` dentro del mismo directorio. Si no pueden guardarse, el monitor continúa y muestra un aviso.
+
+`./start` usa el entorno virtual del repositorio sin tener que activarlo. Después de instalar también están disponibles `.venv/bin/divoom-codex start` y el comando anterior `.venv/bin/codex-minitoo`, con las mismas opciones. Si no se detecta una bocina en una Terminal interactiva, el menú permite volver a buscar después de emparejarla o escribir la dirección manualmente.
+
+### Idioma
+
+Para ejecutar el CLI y todos los temas de MiniToo en español:
+
+```sh
+./start --language es
+```
+
+Usa `--language en` para inglés, o `--lang` como alias. `./start` ofrece un selector **Language / Idioma** antes de elegir bocina, tema y color, con la última selección resaltada. La primera opción es inglés. `--no-prompt` recupera el idioma guardado; un parámetro explícito tiene prioridad. Las ejecuciones continuas guardan el idioma; `--once`, `--preview` y `--help` no modifican las preferencias.
+
+El idioma se aplica a los menús, la ayuda, los mensajes del monitor y las pantallas de uso y reinicios de todos los temas. En español, las fechas usan **día/mes** (con año de dos cifras en la lista de reinicios); las horas conservan el formato de 24 horas. En la pantalla aparecen **ACTIVO**, **REPOSO**, **RECARGA** y **REINICIOS**. TimeBox Mini mantiene sus números y barras, que no dependen del idioma. Los parámetros como `green` o `anime-pixel` no cambian; los detalles nativos de Bluetooth/protocolo se conservan literalmente para diagnóstico.
+
 ## Temas y colores
 
-Estas vistas previas se generan con los mismos renderizadores que usan ambos dispositivos. Los porcentajes y los conteos de resets son ejemplos. MiniToo es el dispositivo predeterminado; agrega `--device timebox-mini` para mostrar las animaciones de TimeBox Mini.
+Estas vistas previas se generan con los mismos renderizadores que usan ambos dispositivos. Los porcentajes y los conteos de resets son ejemplos. La galería muestra MiniToo; usa `./start --device timebox-mini` para el diseño compacto de TimeBox Mini.
 
-| Neón (predeterminado) | Pixel art |
+| Neón (primera ejecución) | Pixel art |
 | --- | --- |
-| ![Tema de uso neón](docs/images/neon.png) | ![Tema de uso pixel art](docs/images/pixel-art.png) |
+| ![Tema de uso neón](docs/images/neon-es.png) | ![Tema de uso pixel art](docs/images/pixel-art-es.png) |
 | `--theme neon` | `--theme pixel-art` |
 
 El tema **anime** tiene cuatro variantes de color. El morado es el predeterminado:
 
 | Morado | Rojo |
 | --- | --- |
-| ![Tema anime morado](docs/images/anime-purple.png) | ![Tema anime rojo](docs/images/anime-red.png) |
+| ![Tema anime morado](docs/images/anime-purple-es.png) | ![Tema anime rojo](docs/images/anime-red-es.png) |
 | `--theme anime --color purple` | `--theme anime --color red` |
 
 | Azul | Verde |
 | --- | --- |
-| ![Tema anime azul](docs/images/anime-blue.png) | ![Tema anime verde](docs/images/anime-green.png) |
+| ![Tema anime azul](docs/images/anime-blue-es.png) | ![Tema anime verde](docs/images/anime-green-es.png) |
 | `--theme anime --color blue` | `--theme anime --color green` |
 
 Por ejemplo, inicia la variante verde así:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --theme anime --color green
 ```
 
-También puedes usar `-color` como alias de `--color`. En MiniToo, neón y pixel art tienen una sola paleta cada uno; si les asignas un color, el monitor avisa y usa los colores predeterminados del tema. Ambos temas anime parpadean alternando imágenes completas de la pantalla y animan el indicador WORKING. Pixel art anima el robot y el fondo; neón anima su indicador de actividad.
+También puedes usar `-color` como alias de `--color`. En MiniToo, neón y pixel art tienen una sola paleta cada uno; si les asignas un color, el monitor avisa y usa los colores predeterminados del tema. Todos los temas con retrato anime parpadean alternando imágenes completas de la pantalla y animan el indicador ACTIVO. Pixel art anima el robot y el fondo; neón anima su indicador de actividad.
 
 El retrato anime se creó para este proyecto a partir de una descripción escrita del personaje, sin imágenes externas de referencia. Sus archivos fuente, instrucciones de generación y exportación al tamaño de pantalla se documentan en [Procedencia de las ilustraciones](docs/ARTWORK.md).
 
-![Animación del indicador de actividad y parpadeo anime](docs/images/anime-demo.gif)
+![Animación del indicador de actividad y parpadeo anime](docs/images/anime-demo-es.gif)
 
 ### Anime pixel art
 
-Selecciona **anime-pixel** para el nuevo personaje adulto, diseñado como una mujer de unos 24 años, con ojos más proporcionados y rostro menos redondo. Se creó de forma independiente a partir de texto, directamente para pixel art, y después se simplificó con mechones amplios, menos reflejos, iris sencillos y bloques de color conectados para la pantalla pequeña. Conserva la interfaz del anime: cuota restante, tiempo hasta el refill, fechas RESET, banco de resets y actividad, con texto de píxeles y marcos cuadrados. Sus imágenes de 78 × 78 usan 16 colores compartidos sin tramado. La piel, las mejillas y el fondo no cambian durante el parpadeo. El tema global predeterminado sigue siendo `neon`.
+Selecciona **anime-pixel** para una mujer adulta de unos 24 años, dibujada con el mismo estilo sencillo de sprite retro que la chibi: mechones amplios, contornos definidos, nariz pequeña y sonrisa corta. Sus proporciones adultas y ojos almendrados más pequeños la distinguen de la chibi. Los [archivos y la descripción del sprite adulto](docs/ANIME_PIXEL_ADULT_RETRO.md) documentan esta revisión. Ambas usan una paleta artística de hasta 16 colores; no es un límite de color del dispositivo. El retrato de 78 × 78 conserva la interfaz del anime: cuota restante, tiempo hasta el refill, fechas de RECARGA, banco de reinicios y actividad animada, con texto de píxeles y marcos cuadrados. La piel, las mejillas y el fondo no cambian durante el parpadeo. Los colores morado, rojo, azul y verde siguen disponibles. La primera opción de tema es `neon`; las ejecuciones siguientes recuperan tu elección guardada.
 
-![Animación del indicador de actividad y parpadeo de anime pixel art](docs/images/anime-pixel-demo.gif)
+![Animación del indicador de actividad y parpadeo de anime pixel art](docs/images/anime-pixel-demo-es.gif)
 
 Soporta los mismos cuatro colores; el morado es el predeterminado:
 
 | Morado | Rojo |
 | --- | --- |
-| ![Anime pixel art morado](docs/images/anime-pixel-purple.png) | ![Anime pixel art rojo](docs/images/anime-pixel-red.png) |
+| ![Anime pixel art morado](docs/images/anime-pixel-purple-es.png) | ![Anime pixel art rojo](docs/images/anime-pixel-red-es.png) |
 | `--theme anime-pixel --color purple` | `--theme anime-pixel --color red` |
 
 | Azul | Verde |
 | --- | --- |
-| ![Anime pixel art azul](docs/images/anime-pixel-blue.png) | ![Anime pixel art verde](docs/images/anime-pixel-green.png) |
+| ![Anime pixel art azul](docs/images/anime-pixel-blue-es.png) | ![Anime pixel art verde](docs/images/anime-pixel-green-es.png) |
 | `--theme anime-pixel --color blue` | `--theme anime-pixel --color green` |
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --theme anime-pixel --color green
 ```
 
 | Una sola ventana de cuota | Banco de resets |
 | --- | --- |
-| ![Anime pixel art verde con una barra vertical de cuota y parpadeo](docs/images/anime-pixel-green-pro-demo.gif) | ![Pantalla de créditos de reset de anime pixel art](docs/images/anime-pixel-resets.png) |
+| ![Anime pixel art verde con una barra vertical de cuota y parpadeo](docs/images/anime-pixel-green-pro-demo-es.gif) | ![Pantalla de créditos de reset de anime pixel art](docs/images/anime-pixel-resets-es.png) |
 
-El personaje pixel art actual comenzó con una generación solo a partir de texto, seguida de ajustes sobre sus propias imágenes generadas. Las imágenes de ojos abiertos y cerrados se exportan a 78 × 78 con una paleta compartida y se guardan como archivos RGB para el dispositivo. Los archivos fuente, los prompts y la exportación se documentan en [Procedencia del pixel art](docs/ANIME_PIXEL_ARTWORK.md).
+Los personajes pixel art comenzaron con generaciones independientes a partir de texto, seguidas de ajustes sobre sus propias imágenes. Los cuadros de ojos abiertos y cerrados se exportan a 78 × 78 como archivos RGB. La adulta sencilla y la chibi usan una paleta artística; la adulta detallada conserva todos sus tonos RGB. Los archivos fuente, los prompts y la exportación se documentan en [Procedencia del pixel art](docs/ANIME_PIXEL_ARTWORK.md).
 
-### Anime pixel art chibi
+### Anime pixel art detail
 
-El personaje pixel anterior se conserva como **anime-pixel-chibi**, con rostro compacto y ojos grandes. Comparte la interfaz, el parpadeo y los colores `purple`, `red`, `blue` y `green` de la versión adulta.
+Selecciona **anime-pixel-detail** para conservar el retrato adulto original, con más detalle en el cabello, los ojos y el sombreado facial. Es la versión detallada guardada después de la comparación RGB satisfactoria. Conserva todos sus tonos RGB nativos y la misma interfaz, parpadeo, animación de actividad, banco de resets y cuatro colores. [Archivos y notas de restauración](docs/ANIME_PIXEL_ADULT_ORIGINAL_RGB.md).
 
-![Parpadeo e indicador de actividad del tema chibi](docs/images/anime-pixel-chibi-demo.gif)
+![Parpadeo e indicador de actividad de detail](docs/images/anime-pixel-detail-demo-es.gif)
 
 | Morado | Rojo |
 | --- | --- |
-| ![Chibi morado](docs/images/anime-pixel-chibi-purple.png) | ![Chibi rojo](docs/images/anime-pixel-chibi-red.png) |
+| ![Detail morado](docs/images/anime-pixel-detail-purple-es.png) | ![Detail rojo](docs/images/anime-pixel-detail-red-es.png) |
+| `--theme anime-pixel-detail --color purple` | `--theme anime-pixel-detail --color red` |
+
+| Azul | Verde |
+| --- | --- |
+| ![Detail azul](docs/images/anime-pixel-detail-blue-es.png) | ![Detail verde](docs/images/anime-pixel-detail-green-es.png) |
+| `--theme anime-pixel-detail --color blue` | `--theme anime-pixel-detail --color green` |
+
+| Una sola ventana de cuota | Banco de resets |
+| --- | --- |
+| ![Animación detail con una sola cuota](docs/images/anime-pixel-detail-green-pro-demo-es.gif) | ![Banco de resets detail](docs/images/anime-pixel-detail-resets-es.png) |
+
+```sh
+./start --address AA:BB:CC:DD:EE:FF --theme anime-pixel-detail --color green --encoding rgb
+```
+
+### Anime pixel art chibi
+
+El personaje pixel anterior se conserva como **anime-pixel-chibi**, con rostro compacto y ojos grandes. Comparte la interfaz, el parpadeo y los colores `purple`, `red`, `blue` y `green` de la versión adulta. Ambos personajes pixel sencillos tienen una sonrisa suave con los ojos abiertos y sonríen un poco más al cerrarlos. [Imágenes fuente y exportación de las sonrisas](docs/ANIME_PIXEL_SMILES.md).
+
+![Parpadeo e indicador de actividad del tema chibi](docs/images/anime-pixel-chibi-demo-es.gif)
+
+| Morado | Rojo |
+| --- | --- |
+| ![Chibi morado](docs/images/anime-pixel-chibi-purple-es.png) | ![Chibi rojo](docs/images/anime-pixel-chibi-red-es.png) |
 | `--theme anime-pixel-chibi --color purple` | `--theme anime-pixel-chibi --color red` |
 
 | Azul | Verde |
 | --- | --- |
-| ![Chibi azul](docs/images/anime-pixel-chibi-blue.png) | ![Chibi verde](docs/images/anime-pixel-chibi-green.png) |
+| ![Chibi azul](docs/images/anime-pixel-chibi-blue-es.png) | ![Chibi verde](docs/images/anime-pixel-chibi-green-es.png) |
 | `--theme anime-pixel-chibi --color blue` | `--theme anime-pixel-chibi --color green` |
 
 ### Pantalla 11 × 11 de TimeBox Mini
@@ -166,7 +228,7 @@ El color de acento predeterminado es cian. Con `--color` puedes elegir **morado*
 Por ejemplo, selecciona el verde así:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --device timebox-mini --color green
 ```
 
@@ -177,16 +239,16 @@ MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
 - **5H** y **7D** identifican las ventanas de uso que Codex devuelve para la cuenta. Algunos planes solo tienen una ventana.
 - El porcentaje grande y la barra principal muestran el **uso restante**. Empiezan en 100 % y disminuyen a medida que usas Codex.
 - La barra vertical delgada junto a cada ventana muestra **el tiempo que falta para el próximo refill**. Disminuye conforme se acerca.
-- **RESET** muestra la hora local estimada de recarga para una ventana corta o la fecha local para una ventana más larga.
-- **WORK/WORKING** indica que un hook instalado detectó un turno de Codex activo. **IDLE** indica que no hay turnos activos. **SETUP** significa que todavía no se detectaron hooks de actividad. Si solo hay una ventana de uso, ambos temas anime muestran un medidor vertical más alto junto al retrato.
+- **RECARGA** (RESET en inglés) muestra la hora local estimada de recarga para una ventana corta o la fecha local para una ventana más larga.
+- **ACTIVO** (WORK/WORKING en inglés) indica que un hook instalado detectó un turno de Codex activo. **REPOSO** (IDLE en inglés) indica que no hay turnos activos. **CONFIG** (SETUP en inglés) significa que todavía no se detectaron hooks de actividad. Si solo hay una ventana de uso, los temas anime muestran un medidor vertical más alto junto al retrato.
 
 Por ejemplo, así se ve el tema anime con una sola ventana de uso Pro:
 
-![Tema anime con una sola ventana de uso Pro vertical](docs/images/anime-single-window.png)
+![Tema anime con una sola ventana de uso Pro vertical](docs/images/anime-single-window-es.png)
 
 ### TimeBox Mini
 
-La pantalla de barras muestra la cuota restante. Si hay dos ventanas, la más corta es la barra superior y la más larga es la inferior. Si solo hay una ventana 7D, aparece una sola barra vertical centrada. La siguiente pantalla muestra únicamente el porcentaje restante (por ejemplo, **62 %**) de la ventana cuyo refill está más próximo. Durante WORKING, la animación pulsante llena la matriz durante ocho segundos y después muestra el porcentaje restante durante dos segundos; el ciclo se repite hasta que termina el turno.
+La pantalla de barras muestra la cuota restante. Si hay dos ventanas, la más corta es la barra superior y la más larga es la inferior. Si solo hay una ventana 7D, aparece una sola barra vertical centrada. La siguiente pantalla muestra únicamente el porcentaje restante (por ejemplo, **62 %**) de la ventana cuyo refill está más próximo. Mientras Codex trabaja, la animación pulsante llena la matriz durante ocho segundos y después muestra el porcentaje restante durante dos segundos; el ciclo se repite hasta que termina el turno.
 
 ### Pantalla de créditos de reset
 
@@ -196,14 +258,14 @@ Ejemplos de la pantalla de resets de MiniToo:
 
 | Neón | Pixel art | Anime |
 | --- | --- | --- |
-| ![Pantalla de resets neón](docs/images/neon-resets.png) | ![Pantalla de resets pixel art](docs/images/pixel-art-resets.png) | ![Pantalla de resets anime](docs/images/anime-resets.png) |
+| ![Pantalla de resets neón](docs/images/neon-resets-es.png) | ![Pantalla de resets pixel art](docs/images/pixel-art-resets-es.png) | ![Pantalla de resets anime](docs/images/anime-resets-es.png) |
 
 Las ventanas de uso y los datos de resets se obtienen mediante el método [`account/rateLimits/read`](https://learn.chatgpt.com/docs/app-server#6-rate-limits-chatgpt) de Codex App Server. Este proyecto solo muestra los créditos de reset; no los canjea.
 
 También puedes pasar la dirección como una opción:
 
 ```sh
-.venv/bin/codex-minitoo --address "AA:BB:CC:DD:EE:FF"
+./start --address "AA:BB:CC:DD:EE:FF"
 ```
 
 ## Elegir el perfil de cuenta de Codex
@@ -211,7 +273,7 @@ También puedes pasar la dirección como una opción:
 Las barras de uso corresponden a la cuenta ChatGPT iniciada en el perfil de Codex seleccionado. Si usas perfiles separados para una cuenta principal y otra Personal, selecciona uno con `--codex-home`:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --codex-home "$HOME/Library/Application Support/Parall/ChatGPT (Personal)/.codex"
 ```
 
@@ -222,36 +284,41 @@ Sustituye la ruta por el directorio del perfil que uses. También puedes estable
 Guarda una vista previa sin conectarte a un dispositivo Divoom ni indicar una dirección. Como usa datos de uso actuales, también necesitas un perfil de Codex con sesión iniciada:
 
 ```sh
-.venv/bin/codex-minitoo --theme anime --color blue --preview preview.png
+./start --theme anime --color blue --preview preview.png
 ```
 
 Para obtener una vista previa del diseño compacto de TimeBox Mini en azul:
 
 ```sh
-.venv/bin/codex-minitoo --device timebox-mini --color blue --preview timebox-mini-preview.png
+./start --device timebox-mini --color blue --preview timebox-mini-preview.png
 ```
 
 Envía una actualización y termina:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --once
+./start --once
 ```
 
 Actualiza el uso cada 90 segundos (el mínimo es 10 segundos):
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --interval 90
+./start --interval 90
 ```
 
 | Opción | Propósito |
 | --- | --- |
-| `--address ADDRESS` | Dirección MAC Bluetooth de Divoom; también acepta `MINITOO_ADDRESS` |
-| `--device DEVICE` | `minitoo` (predeterminado) o `timebox-mini` |
-| `--theme neon`, `--theme pixel-art`, `--theme anime`, `--theme anime-pixel`, `--theme anime-pixel-chibi` | Tema MiniToo; el predeterminado es `neon`. TimeBox Mini siempre usa su diseño compacto. |
-| `--color`, `-color` | Acento TimeBox Mini: `cyan` (predeterminado), `purple`, `red`, `blue` o `green`; paleta de los temas anime, anime-pixel y anime-pixel-chibi de MiniToo: `purple` (predeterminado), `red`, `blue` o `green` |
+| `start` | Comando opcional para iniciar el monitor. El lanzador del repositorio es `./start`. |
+| `--address ADDRESS` | Dirección MAC Bluetooth manual opcional; también acepta `MINITOO_ADDRESS`. Omítela para detectar bocinas emparejadas. |
+| `--device DEVICE` | Filtra la detección a `minitoo` o `timebox-mini`; una dirección explícita sin esta opción usa MiniToo |
+| `--theme neon`, `--theme pixel-art`, `--theme anime`, `--theme anime-pixel`, `--theme anime-pixel-chibi`, `--theme anime-pixel-detail` | Tema MiniToo; el parámetro explícito tiene prioridad sobre la preferencia guardada. Primera opción: `neon`. TimeBox Mini siempre usa su diseño compacto. |
+| `--color`, `-color` | Reemplaza el color guardado. TimeBox Mini: `cyan` (inicial), `purple`, `red`, `blue`, `green`; temas con retrato MiniToo: `purple` (inicial), `red`, `blue`, `green` |
+| `--language en`, `--language es`, `--lang` | Idioma del CLI y la pantalla; tiene prioridad sobre la elección guardada. Primera opción: inglés |
+| `--no-prompt` | Omite los menús; usa idioma/tema/color explícitos o las preferencias guardadas |
+| `--sent compact`, `--sent detailed` | Una línea de estado actualizable (predeterminado) o una línea completa por cada envío; la salida redirigida usa líneas simples |
 | `--codex-home PATH` | Perfil de Codex para consultar el uso; también acepta `CODEX_HOME` |
 | `--codex-bin PATH` | Ejecutable de Codex CLI; también acepta `CODEX_BIN` |
 | `--interval SECONDS` | Intervalo entre consultas de uso; predeterminado: `60`, mínimo: `10` |
+| `--encoding rgb`, `--encoding jpeg` | Codificación MiniToo; RGB888/Zstandard sin pérdida por defecto. JPEG sigue disponible explícitamente. TimeBox Mini siempre usa RGB444. |
 | `--preview FILE` | Guarda un PNG sin usar Bluetooth |
 | `--once` | Envía una actualización y termina |
 | `--log-file FILE` | Archivo de diagnóstico; predeterminado: `~/Library/Logs/divoom-minitoo-codex/<device>-<port>.log`. Privado (`0600`); rota a 1 MiB y conserva dos respaldos. |
@@ -259,22 +326,24 @@ MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --interval 90
 Si `codex` no está en el `PATH` de Terminal, establece `CODEX_BIN` con la ruta al ejecutable de CLI:
 
 ```sh
-CODEX_BIN="/ruta/a/codex" MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo
+CODEX_BIN="/ruta/a/codex" ./start
 ```
 
 ## Soporte de animaciones
 
-Los temas MiniToo envían imágenes JPEG completas para sus animaciones. TimeBox Mini usa su propio protocolo Bluetooth RGB444 para una matriz de 11 × 11 y envía una nueva imagen de la matriz cada segundo durante la animación WORKING de pantalla completa. No carga un GIF. Cuando está inactivo, alterna entre las barras de cuota y el porcentaje restante para la recarga más próxima. MiniToo usa el canal Bluetooth RFCOMM 1; TimeBox Mini usa el canal 4. Sus puentes locales usan los puertos `40584` y `40585`, respectivamente, así que ambos monitores pueden ejecutarse a la vez. El protocolo de imagen de TimeBox Mini sigue la [documentación de la comunidad](https://github.com/MarcG046/timebox/blob/master/doc/protocol.md), no una API pública de Divoom.
+Los temas MiniToo envían cuadros completos para sus animaciones, en **RGB888/Zstandard sin pérdida por defecto** o JPEG con `--encoding jpeg`. RGB comprime toda la secuencia conservando los colores y tiempos de cada cuadro. La [prueba RGB nativa](docs/MINITOO_RGB.md) puede ayudar a diagnosticar problemas de pantalla en tu firmware. TimeBox Mini usa su propio protocolo Bluetooth RGB444 para una matriz de 11 × 11 y envía una nueva imagen de la matriz cada segundo durante la animación de actividad de pantalla completa. No carga un GIF. Cuando está inactivo, alterna entre las barras de cuota y el porcentaje restante para la recarga más próxima. MiniToo usa el canal Bluetooth RFCOMM 1; TimeBox Mini usa el canal 4. Sus puentes locales usan los puertos `40584` y `40585`, respectivamente, así que ambos monitores pueden ejecutarse a la vez. El protocolo de imagen de TimeBox Mini sigue la [documentación de la comunidad](https://github.com/MarcG046/timebox/blob/master/doc/protocol.md), no una API pública de Divoom.
 
 ## Solución de problemas
 
+- **No se detecta la bocina:** Enciéndela, activa Bluetooth y empareja la bocina en los ajustes Bluetooth de macOS. Autoriza el acceso Bluetooth de Terminal si macOS lo solicita. La detección reconoce los nombres de los modelos compatibles; si cambiaste el nombre, puedes usar la dirección manual en el menú. Ejecuta otra vez `./scripts/install.sh` si falta el detector. Otros modelos Divoom no se seleccionan automáticamente.
+- **Tablero de ajedrez o manchas en detalles finos del MiniToo:** En una [comparación física JPEG frente a RGB](docs/MINITOO_CODEC_COMPARISON.md), RGB sin pérdida eliminó el defecto en la imagen de prueba de 128 × 128. Usa la [prueba RGB nativa](docs/MINITOO_RGB.md) para el dashboard completo y las animaciones; si se muestran correctamente, selecciona `--encoding rgb`. La [comparación de calidad JPEG](docs/JPEG_QUALITY_COMPARISON.md) sigue disponible para diagnóstico.
 - **No aparecen las barras de uso:** Inicia sesión en un perfil de ChatGPT con uso de Codex. Si utilizas otro perfil, pasa su ruta con `--codex-home`.
 - **El puente no devuelve datos o la respuesta no es válida:** Ejecuta otra vez `./scripts/install.sh` para recompilar los puentes, confirma que el dispositivo esté enlazado y revisa su dirección MAC. Para TimeBox Mini, cierra la aplicación Divoom al conectar.
 - **Se perdió la conexión, se detuvo el puente o no se confirmó una transferencia:** El monitor cierra el puente fallido e intenta una vez con una sesión Bluetooth nueva. Si ambos intentos fallan, el monitor continuo sigue ejecutándose e intenta de nuevo con pausas de 5, 10, 20, 40 y hasta 60 segundos. No marca como completada una transferencia fallida. `--once` termina con un error si los dos intentos fallan. Los mensajes muestran la etapa de conexión, el código de salida del puente cuando está disponible y sus logs recientes.
 - **MiniToo se queda en la pantalla de carga:** El puente procesa pedidos de bloques durante la transferencia, valida las sumas de comprobación de los paquetes y reconoce la [confirmación final capturada](https://github.com/alvinunreal/divoom-minitoo-osx/blob/main/PROTOCOL.md#final-ack) en vez de tomar cualquier respuesta como confirmación. Exige que MiniToo solicite los datos en los primeros 5 segundos; si no responde, no envía imágenes y reconecta. Espera hasta 10 segundos por un bloque solicitado, limita la transferencia Bluetooth a 40 segundos y espera hasta 60 segundos la respuesta local. La recuperación ocurre en cualquier pantalla. Si el dispositivo ya quedó bloqueado por una transferencia anterior incompleta, detén el monitor, cierra la aplicación Divoom y la conexión de audio Bluetooth de MiniToo, apaga y enciende MiniToo, y reinicia el monitor. Si falta la confirmación, la transferencia no está confirmada; eso no demuestra por sí solo que no se haya actualizado la pantalla.
 - **Diagnóstico de un bloqueo recurrente:** Cada monitor guarda logs con fecha y hora, errores y salida del puente, incluidos los bytes de control Bluetooth recibidos. El log predeterminado de MiniToo es `~/Library/Logs/divoom-minitoo-codex/minitoo-40584.log`; TimeBox Mini usa `~/Library/Logs/divoom-minitoo-codex/timebox-mini-40585.log`. La ruta completa se muestra al iniciar. Puedes elegir otra con `--log-file /ruta/al/monitor.log`. Al reportar un bloqueo, incluye la sección del log correspondiente: permite distinguir si el dispositivo no responde o si llegó una respuesta que el puente no reconoce. Los logs pueden incluir direcciones de conexión y porcentajes de uso mostrados; no contienen prompts, tokens de acceso ni imágenes.
 - **El puerto local ya está en uso:** Detén el otro monitor del mismo modelo. El monitor espera el aviso de disponibilidad de su propio puente; otro proceso que escucha ese puerto no se considera una conexión correcta. MiniToo y TimeBox Mini pueden funcionar a la vez porque usan distintos puertos predeterminados (`40584` y `40585`).
-- **La pantalla no muestra WORK:** Mantén el monitor en ejecución, revisa y autoriza los hooks de Divoom con `/hooks` en el mismo perfil que recibió el prompt y reinicia ese perfil. El hook no responde en la conversación de Codex; actualiza `~/.codex/divoom-minitoo-codex-activity.json` para que lo lea el monitor.
+- **La pantalla no muestra ACTIVO / WORK:** Mantén el monitor en ejecución, revisa y autoriza los hooks de Divoom con `/hooks` en el mismo perfil que recibió el prompt y reinicia ese perfil. El hook no responde en la conversación de Codex; actualiza `~/.codex/divoom-minitoo-codex-activity.json` para que lo lea el monitor.
 - **macOS deniega el acceso a Bluetooth:** Autoriza Bluetooth para el proceso que ejecuta el puente en Configuración del Sistema de macOS.
 - **Aparece un reloj de arena durante una actualización MiniToo:** MiniToo puede mostrar su propia pantalla de transferencia/carga al recibir imágenes modificadas. El monitor evita enviar imágenes idénticas, pero un cambio visible puede activar esa pantalla.
 

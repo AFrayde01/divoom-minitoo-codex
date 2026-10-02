@@ -4,7 +4,7 @@
 
 Show your Codex usage, refill times, activity, and available reset credits on a Divoom MiniToo or TimeBox Mini. The monitor reads the signed-in account through the local Codex App Server. MiniToo receives a 160 × 128 dashboard; TimeBox Mini receives a compact screen for its 11 × 11 LED matrix.
 
-This version runs on **macOS**. MiniToo includes five themes: **neon**, **pixel-art**, **anime**, **anime-pixel** (adult), and **anime-pixel-chibi**. TimeBox Mini uses one compact layout designed for its 11 × 11 LED matrix, with optional accent colors. [See the theme gallery](#themes-and-colors).
+This version runs on **macOS**. MiniToo includes six themes: **neon**, **pixel-art**, **anime**, **anime-pixel** (adult in the chibi drawing style), **anime-pixel-chibi**, and **anime-pixel-detail** (detailed adult). TimeBox Mini uses one compact layout designed for its 11 × 11 LED matrix, with optional accent colors. [See the theme gallery](#themes-and-colors).
 
 ## Requirements
 
@@ -41,7 +41,11 @@ If you add a Codex profile later, install its hooks with:
 
 Stop the monitor with `Ctrl+C`, update your repository checkout and run `./scripts/install.sh` again. Rebuild **both bridges** to enable local authentication; an older binary is rejected with an upgrade message. Then restart the monitor. Existing hooks retain their configuration; review `/hooks` if Codex asks you to trust an updated hook.
 
-## Find the Divoom Bluetooth address
+The update also installs the lossless RGB compressor and rebuilds MiniToo's RGB-capable bridge. **Lossless RGB888/Zstandard is now the MiniToo default**, at the native 160 × 128 size. You do not need to pass `--encoding rgb`. Use `--encoding jpeg` to explicitly select JPEG. [RGB usage and native display check](docs/MINITOO_RGB.md).
+
+## Find the Divoom Bluetooth address (optional)
+
+`./start` automatically reads supported paired speakers from macOS Bluetooth, so you normally do not need an address. Pair the speaker in macOS Bluetooth settings first. Detection recognizes MiniToo and TimeBox Mini by their Bluetooth names; if you renamed yours or want to specify one manually, find its address as follows:
 
 1. Turn on the Divoom device and pair it in **System Settings → Bluetooth**.
 2. Open **System Information → Hardware → Bluetooth**, find the MiniToo or TimeBox Mini in the device list, and copy its **Address**. You can also inspect the list in Terminal:
@@ -59,22 +63,56 @@ If the MiniToo is connected as a Bluetooth audio device, disconnect that audio p
 Start the continuous monitor with:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo
+./start
 ```
 
-If you omit `--device`, the monitor uses the **MiniToo**. Its default theme is **neon**. To use a TimeBox Mini, add `--device timebox-mini`; it uses its compact default layout:
+If macOS has one supported Divoom paired, its address and model are selected automatically. If there are several, choose the speaker from the menu; currently connected speakers appear first, with MiniToo preferred when connection status is equal. Connected status does not guarantee that the image channel is free or that a disconnected paired speaker is powered on. The monitor then offers the theme and supported color, with your previous choices selected. The first MiniToo theme is **neon**. TimeBox Mini uses its compact layout and offers its accent colors.
+
+To show only TimeBox Mini devices:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --device timebox-mini
+./start --device timebox-mini
 ```
 
 Keep Terminal open while it runs; stop it with `Ctrl+C`. It reads usage at startup and every 60 seconds, checks activity every second, and reads usage again when a Codex turn ends. It sends an image when the display changes. The hook is silent in the Codex conversation; its status appears on the display.
 
+### Startup choices and terminal output
+
+- Use **↑ / ↓** to move through languages, speakers, themes and colors, then **Enter** to select. Numbers **1–9** jump to an option; **Esc / Q** or **Ctrl+C** cancel. Press Enter immediately to keep the highlighted choice. Terminals without key-mode support fall back to number/name input. Anime colors start with purple; TimeBox Mini starts with cyan. Neon and the robot pixel-art theme use fixed palettes.
+- Explicit `--language`, `--theme` and `--color` values take priority and skip their respective questions. Continuous runs remember theme/color choices separately for each device and one shared language.
+- Add `--no-prompt` to start directly with explicit options or your saved choices. `--once`, `--preview`, redirected input/output and `TERM=dumb` also skip the menu; once/preview runs leave saved choices unchanged.
+- Without a menu, automatic detection must find exactly one matching speaker; otherwise specify `--device` or `--address`. An explicit address (or `MINITOO_ADDRESS`) bypasses detection; without a model, an explicit address uses MiniToo. Preview defaults to MiniToo without reading Bluetooth.
+- Transfer updates **replace one status line** by default. It shows the latest send time, remaining quota, activity and displayed page. Long status text is clipped to fit the terminal; errors and the diagnostic log retain full details.
+- Add `--sent detailed` for one complete line per successful send, including TimeBox Mini animation frames. Redirected output always uses plain lines.
+
+For example:
+
+```sh
+./start --no-prompt
+./start --sent detailed
+```
+
+Preferences are stored locally in `~/Library/Application Support/divoom-minitoo-codex/minitoo.json` or `timebox-mini.json`. These private files contain only the theme and color. The shared CLI/display language is stored in `language.json` in the same directory. If they cannot be saved, the monitor continues and prints a notice.
+
+`./start` uses the repository's virtual environment without requiring activation. After installation, `.venv/bin/divoom-codex start` and the existing `.venv/bin/codex-minitoo` entry point are also available. All support the same options. If no speaker is detected in an interactive terminal, the menu lets you retry after pairing or enter an address manually.
+
+### Language
+
+Run the CLI and all MiniToo themes in Spanish:
+
+```sh
+./start --language es
+```
+
+Use `--language en` for English, or `--lang` as an alias. `./start` offers a **Language / Idioma** selector before the speaker/theme/color menus and highlights the last selection. The initial language is English. `--no-prompt` restores the saved language; an explicit flag overrides it. Continuous runs save the language, while `--once`, `--preview` and `--help` do not change preferences.
+
+The language applies to menus, help, monitor messages and every theme's usage/reset-credit screen. Spanish dates use **day/month** (with a two-digit year on reset-credit lists); hours stay in 24-hour format. The compact display uses **ACTIVO**, **REPOSO**, **RECARGA** and **REINICIOS**. TimeBox Mini keeps its language-independent numbers and bars. Command values such as `green` and `anime-pixel` stay the same; native Bluetooth/protocol diagnostics stay verbatim for troubleshooting.
+
 ## Themes and colors
 
-These previews are generated by the same renderers used for each device. The percentages and reset counts are illustrative. MiniToo is the default device; use `--device timebox-mini` to show the TimeBox Mini animations below.
+These previews are generated by the same renderers used for each device. The percentages and reset counts are illustrative. The gallery below shows MiniToo; use `./start --device timebox-mini` for the compact TimeBox Mini layout.
 
-| Neon (default) | Pixel art |
+| Neon (first-start default) | Pixel art |
 | --- | --- |
 | ![Neon usage theme](docs/images/neon.png) | ![Pixel art usage theme](docs/images/pixel-art.png) |
 | `--theme neon` | `--theme pixel-art` |
@@ -94,11 +132,11 @@ The **anime** theme has four color variants. Purple is the default:
 For example, start the green variant with:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --theme anime --color green
 ```
 
-`-color` also works as an alias for `--color`. On MiniToo, neon and pixel art have one palette each; if you pass a color with either theme, the monitor prints a notice and uses that theme's default colors. Both anime themes blink by cycling through complete display frames and animate their WORKING badge. Pixel art animates its robot and background; neon animates its working indicator.
+`-color` also works as an alias for `--color`. On MiniToo, neon and pixel art have one palette each; if you pass a color with either theme, the monitor prints a notice and uses that theme's default colors. All anime portrait themes blink by cycling through complete display frames and animate their WORKING badge. Pixel art animates its robot and background; neon animates its working indicator.
 
 The anime portrait was created for this project from a written character brief, with no external reference images. Its source files, generation prompts and native-frame export instructions are recorded in [Artwork provenance](docs/ARTWORK.md).
 
@@ -106,7 +144,7 @@ The anime portrait was created for this project from a written character brief, 
 
 ### Anime pixel art
 
-Select **anime-pixel** for the new adult character, designed as a woman around 24 years old with smaller, proportionate eyes and a less rounded face. It was independently created from text directly for pixel art, then refined with broad hair shapes, fewer highlights, simple irises and connected color clusters for the small display. The theme keeps the anime dashboard: remaining quota, refill countdowns, RESET dates, reset bank and activity, with bitmap text and square frames. Its native 78 × 78 frames share a 16-color palette without dithering. Skin, cheeks and background remain identical during a blink. The global default theme remains `neon`.
+Select **anime-pixel** for an adult woman around 24, drawn in the same simple retro sprite style as the chibi: broad connected hair shapes, clean pixel contours, a compact nose and a short closed smile. Adult proportions and smaller almond eyes distinguish her from the chibi. The [adult sprite brief and sources](docs/ANIME_PIXEL_ADULT_RETRO.md) document this revision. Both use a shared artistic palette of up to 16 colors, not a hardware color limit. The native 78 × 78 portrait keeps the anime dashboard: remaining quota, refill countdowns, RESET dates, reset bank and animated activity, with bitmap text and square frames. Skin, cheeks and background remain identical during a blink. Purple, red, blue and green remain supported. The first-start theme is `neon`; later runs restore your saved choice.
 
 ![Anime pixel art working indicator and blink animation](docs/images/anime-pixel-demo.gif)
 
@@ -123,7 +161,7 @@ The same four colors are supported; purple is the default:
 | `--theme anime-pixel --color blue` | `--theme anime-pixel --color green` |
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --theme anime-pixel --color green
 ```
 
@@ -131,11 +169,35 @@ MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
 | --- | --- |
 | ![Green anime pixel art with one vertical quota bar and blinking animation](docs/images/anime-pixel-green-pro-demo.gif) | ![Anime pixel art reset-credit screen](docs/images/anime-pixel-resets.png) |
 
-The current pixel character began with a text-only generation, followed by edits using its own generated artwork. Its open-eye and blink images are exported at 78 × 78 with a shared palette, then saved as RGB runtime assets. Sources, prompts and export details are recorded in [Pixel artwork provenance](docs/ANIME_PIXEL_ARTWORK.md).
+The pixel characters began with independent text-only generations, followed by edits using only this project's own generated artwork. Open-eye and blink images are exported at 78 × 78 as RGB runtime assets. The simple adult and chibi use an artistic palette; the detailed adult preserves its full RGB tones. Sources, prompts and export details are recorded in [Pixel artwork provenance](docs/ANIME_PIXEL_ARTWORK.md).
+
+### Anime pixel art detail
+
+Select **anime-pixel-detail** to keep the original adult portrait with its richer hair, eyes and facial shading. This is the detailed version preserved after the successful RGB comparison. It keeps its full native RGB tones and the same dashboard, blink, WORKING animation, reset bank and four colors. [Sources and restoration notes](docs/ANIME_PIXEL_ADULT_ORIGINAL_RGB.md).
+
+![Detail blink and working animation](docs/images/anime-pixel-detail-demo.gif)
+
+| Purple | Red |
+| --- | --- |
+| ![Detail purple](docs/images/anime-pixel-detail-purple.png) | ![Detail red](docs/images/anime-pixel-detail-red.png) |
+| `--theme anime-pixel-detail --color purple` | `--theme anime-pixel-detail --color red` |
+
+| Blue | Green |
+| --- | --- |
+| ![Detail blue](docs/images/anime-pixel-detail-blue.png) | ![Detail green](docs/images/anime-pixel-detail-green.png) |
+| `--theme anime-pixel-detail --color blue` | `--theme anime-pixel-detail --color green` |
+
+| Single quota window | Reset bank |
+| --- | --- |
+| ![Detail single quota animation](docs/images/anime-pixel-detail-green-pro-demo.gif) | ![Detail reset bank](docs/images/anime-pixel-detail-resets.png) |
+
+```sh
+./start --address AA:BB:CC:DD:EE:FF --theme anime-pixel-detail --color green --encoding rgb
+```
 
 ### Anime pixel art chibi
 
-The previous pixel character is preserved as **anime-pixel-chibi**, with a compact face and large eyes. It shares the adult variant's layout, blink and `purple`, `red`, `blue` and `green` colors.
+The previous pixel character is preserved as **anime-pixel-chibi**, with a compact face and large eyes. It shares the adult variant's layout, blink and `purple`, `red`, `blue` and `green` colors. Both simple pixel characters have a gentle smile with their eyes open and a broader smile during the closed-eye frame. [Smile sources and animation export](docs/ANIME_PIXEL_SMILES.md).
 
 ![Chibi blink and working animation](docs/images/anime-pixel-chibi-demo.gif)
 
@@ -166,7 +228,7 @@ The default accent is cyan. You can choose **purple**, **red**, **blue**, or **g
 For example, select green with:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --device timebox-mini --color green
 ```
 
@@ -178,7 +240,7 @@ MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
 - The large percentage and main bar show **usage remaining**, starting at 100% and shrinking as Codex is used.
 - The slim vertical bar beside each window shows **time remaining until that window refills**. It shrinks toward the refill.
 - **RESET** shows the expected local refill time for a short window or local date for a longer window.
-- **WORK/WORKING** means an installed activity hook sees an active Codex turn. **IDLE** means no active turn. **SETUP** means activity hooks have not been detected. When only one usage window is available, both anime themes use a taller vertical meter beside the portrait.
+- **WORK/WORKING** means an installed activity hook sees an active Codex turn. **IDLE** means no active turn. **SETUP** means activity hooks have not been detected. When only one usage window is available, the anime portrait themes use a taller vertical meter beside the portrait.
 
 For example, the anime layout with a single Pro usage window looks like this:
 
@@ -203,7 +265,7 @@ The usage windows and reset-credit details come from Codex App Server's [`accoun
 You can also pass the address as an option:
 
 ```sh
-.venv/bin/codex-minitoo --address "AA:BB:CC:DD:EE:FF"
+./start --address "AA:BB:CC:DD:EE:FF"
 ```
 
 ## Choose a Codex account profile
@@ -211,7 +273,7 @@ You can also pass the address as an option:
 The usage bars belong to the ChatGPT account signed in to the selected Codex profile. If you use separate profiles for a main and Personal account, select one with `--codex-home`:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo \
+./start \
   --codex-home "$HOME/Library/Application Support/Parall/ChatGPT (Personal)/.codex"
 ```
 
@@ -222,36 +284,41 @@ Substitute the profile directory you actually use. You can also set `CODEX_HOME`
 Save a preview without connecting to a Divoom display or providing an address. A signed-in Codex profile is still required because the preview uses live usage data:
 
 ```sh
-.venv/bin/codex-minitoo --theme anime --color blue --preview preview.png
+./start --theme anime --color blue --preview preview.png
 ```
 
 To preview the compact TimeBox Mini layout in blue:
 
 ```sh
-.venv/bin/codex-minitoo --device timebox-mini --color blue --preview timebox-mini-preview.png
+./start --device timebox-mini --color blue --preview timebox-mini-preview.png
 ```
 
 Send one update and exit:
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --once
+./start --once
 ```
 
 Refresh usage every 90 seconds (the minimum is 10 seconds):
 
 ```sh
-MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --interval 90
+./start --interval 90
 ```
 
 | Option | Purpose |
 | --- | --- |
-| `--address ADDRESS` | Divoom Bluetooth MAC address; also accepts `MINITOO_ADDRESS` |
-| `--device DEVICE` | `minitoo` (default) or `timebox-mini` |
-| `--theme neon`, `--theme pixel-art`, `--theme anime`, `--theme anime-pixel`, `--theme anime-pixel-chibi` | MiniToo theme; default: `neon`. TimeBox Mini always uses its compact default layout. |
-| `--color`, `-color` | TimeBox Mini accent: `cyan` (default), `purple`, `red`, `blue`, or `green`; MiniToo anime, anime-pixel and anime-pixel-chibi palette: `purple` (default), `red`, `blue`, or `green` |
+| `start` | Optional command; starts the monitor. The repository launcher is `./start`. |
+| `--address ADDRESS` | Optional manual Bluetooth MAC address; also accepts `MINITOO_ADDRESS`. Omit for paired-speaker detection. |
+| `--device DEVICE` | Filters automatic detection to `minitoo` or `timebox-mini`; an explicit address without this option uses MiniToo |
+| `--theme neon`, `--theme pixel-art`, `--theme anime`, `--theme anime-pixel`, `--theme anime-pixel-chibi`, `--theme anime-pixel-detail` | MiniToo theme; explicit option overrides the saved choice. Initial choice: `neon`. TimeBox Mini always uses its compact layout. |
+| `--color`, `-color` | Overrides the saved color. TimeBox Mini: `cyan` (initial), `purple`, `red`, `blue`, `green`; MiniToo portrait themes: `purple` (initial), `red`, `blue`, `green` |
+| `--language en`, `--language es`, `--lang` | CLI and display language; overrides the saved choice. Initial choice: English |
+| `--no-prompt` | Skip startup selection; use explicit language/theme/color or saved choices |
+| `--sent compact`, `--sent detailed` | Compact single-row status (default) or a complete line for every sent update; redirected output uses plain lines |
 | `--codex-home PATH` | Codex profile for usage data; also accepts `CODEX_HOME` |
 | `--codex-bin PATH` | Codex CLI executable; also accepts `CODEX_BIN` |
 | `--interval SECONDS` | Usage refresh interval; default: `60`, minimum: `10` |
+| `--encoding rgb`, `--encoding jpeg` | MiniToo encoding; default: lossless RGB888/Zstandard. JPEG remains available explicitly. TimeBox Mini always uses RGB444. |
 | `--preview FILE` | Write one PNG without Bluetooth |
 | `--once` | Send one update, then exit |
 | `--log-file FILE` | Diagnostic log; default: `~/Library/Logs/divoom-minitoo-codex/<device>-<port>.log`. Private (`0600`); rotates at 1 MiB with two backups. |
@@ -259,15 +326,17 @@ MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo --interval 90
 If `codex` is not on Terminal's `PATH`, set `CODEX_BIN` to the CLI executable:
 
 ```sh
-CODEX_BIN="/path/to/codex" MINITOO_ADDRESS="AA:BB:CC:DD:EE:FF" .venv/bin/codex-minitoo
+CODEX_BIN="/path/to/codex" ./start
 ```
 
 ## Animation support
 
-MiniToo themes send complete JPEG frames for their animations. TimeBox Mini uses its own 11 × 11 RGB444 Bluetooth protocol and sends a new matrix image once per second while the full-screen WORKING animation runs. It does not upload a GIF. While idle, it alternates between quota bars and the remaining percentage for the nearest refill. The MiniToo uses Bluetooth RFCOMM channel 1, while TimeBox Mini uses channel 4. Their local bridges use ports `40584` and `40585`, respectively, so both model monitors can run at the same time. The TimeBox Mini image protocol follows [community documentation](https://github.com/MarcG046/timebox/blob/master/doc/protocol.md) rather than a public Divoom API.
+MiniToo themes send complete frames for their animations, using **lossless RGB888/Zstandard by default** or JPEG with `--encoding jpeg`. RGB compresses the full sequence together while preserving frame colors and timing. The [native RGB check](docs/MINITOO_RGB.md) can help diagnose display issues on your firmware. TimeBox Mini uses its own 11 × 11 RGB444 Bluetooth protocol and sends a new matrix image once per second while the full-screen WORKING animation runs. It does not upload a GIF. While idle, it alternates between quota bars and the remaining percentage for the nearest refill. The MiniToo uses Bluetooth RFCOMM channel 1, while TimeBox Mini uses channel 4. Their local bridges use ports `40584` and `40585`, respectively, so both model monitors can run at the same time. The TimeBox Mini image protocol follows [community documentation](https://github.com/MarcG046/timebox/blob/master/doc/protocol.md) rather than a public Divoom API.
 
 ## Troubleshooting
 
+- **No speaker detected:** Turn it on, enable Bluetooth and pair it in macOS Bluetooth settings. Allow Terminal Bluetooth access if macOS asks. Detection recognizes the supported model names; renamed speakers can use the manual address option in the menu. Re-run `./scripts/install.sh` if the detection helper is missing. Other Divoom models are not automatically selected.
+- **Checkerboard or mottled fine details on MiniToo:** A physical [JPEG versus RGB comparison](docs/MINITOO_CODEC_COMPARISON.md) eliminated this defect with lossless RGB on a tested 128 × 128 image. Use the [native RGB check](docs/MINITOO_RGB.md) for the full dashboard and animations, then select `--encoding rgb` if they display correctly. The earlier [JPEG quality comparison](docs/JPEG_QUALITY_COMPARISON.md) remains available for diagnostics.
 - **No usage bars:** Sign in to a ChatGPT account with Codex usage in the selected profile. If you use a separate profile, pass its path with `--codex-home`.
 - **The bridge reports no data or an invalid response:** Run `./scripts/install.sh` again to rebuild the bridges, confirm the selected Divoom is paired, and check its MAC address. For TimeBox Mini, close the Divoom app while connecting.
 - **Connection lost, bridge stopped, or transfer not confirmed:** The monitor closes the failed bridge and retries once over a new Bluetooth session. If both attempts fail, continuous monitoring keeps running and retries the current screen after 5, 10, 20, 40, then at most 60 seconds between attempts. Failed transfers are not cached as completed. `--once` exits with an error if neither attempt succeeds. Errors include the connection stage, the bridge exit code when available, and recent bridge logs.

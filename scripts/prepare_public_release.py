@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TOP_LEVEL = {".gitignore", "README.md", "README.es.md", "LICENSE", "SECURITY.md",
-                    "CONTRIBUTING.md", "THIRD_PARTY_NOTICES.md", "pyproject.toml"}
+                    "CONTRIBUTING.md", "THIRD_PARTY_NOTICES.md", "pyproject.toml", "start"}
 PUBLIC_DIRECTORIES = {"Sources", "src", "scripts", "tests", "docs", ".github"}
 
 
