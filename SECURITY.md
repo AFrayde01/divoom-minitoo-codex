@@ -18,7 +18,7 @@ Security-sensitive paths include `src/divoom_minitoo_codex/bridge.py`, `diagnost
 - The credential is generated afresh for each bridge process and passed through its inherited standard-input pipe. It must not be written to arguments, environment variables, files or diagnostics. Older bridges without authenticated readiness must be rejected.
 - Local requests must have bounded size, receive time and concurrent connection count. Bluetooth transfers must remain serialized and have bounded recovery behavior.
 - Active and rotated diagnostic files must be regular files owned by the current user, with permissions `0600`. The application's dedicated default log directory must use `0700`. Log handling must reject final symlinks and shared hardlinks; custom existing parent directories must retain their permissions.
-- Account access tokens, prompts, responses and tool output must not be collected by the monitor or hooks. The monitor may display usage values and reset-credit metadata returned by Codex.
+- Account access tokens, prompts, responses and tool output must not be collected by the monitor or hooks. The monitor may display usage values, reset-credit metadata and the account email returned by the same local Codex App Server/profile. Gallery generation must use fictional account data.
 - Hook installation must preserve unrelated hooks and provide backups. Shared activity state must contain only the metadata necessary to track activity.
 
 ## Assessment context and limitations

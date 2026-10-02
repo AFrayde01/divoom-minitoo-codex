@@ -143,6 +143,8 @@ _PIXEL_GLYPHS = {
     "-": ("000", "000", "111", "000", "000"),
     "+": ("000", "010", "111", "010", "000"),
     "/": ("001", "001", "010", "100", "100"),
+    "@": ("01110", "10001", "10111", "10101", "01111"),
+    "_": ("000", "000", "000", "000", "111"),
     " ": ("000", "000", "000", "000", "000"),
 }
 
@@ -303,6 +305,41 @@ def _draw_centered_text(
     draw.text((x, y), text, font=font, fill=color)
 
 
+def _draw_account_footer(
+    draw: ImageDraw.ImageDraw,
+    snapshot: UsageSnapshot,
+    color: tuple[int, int, int],
+    pixel_art: bool = False,
+) -> None:
+    """Identify the quota account without overlapping the plan or frame."""
+    font = _anime_font(8, pixel_art=pixel_art)
+    left, right = 9, WIDTH - 10
+    available_width = right - left + 1
+    email = snapshot.account_email or ""
+    email = "".join(character for character in email if character.isprintable()).strip().upper()
+
+    def width(text: str) -> int:
+        bounds = draw.textbbox((0, 0), text, font=font)
+        return bounds[2] - bounds[0]
+
+    def text_y(text: str) -> int:
+        bounds = draw.textbbox((0, 0), text, font=font)
+        # Center the visible ink in rows 113–121, including email descenders.
+        return 113 + (9 - (bounds[3] - bounds[1])) // 2 - bounds[1]
+
+    plan = f"PLAN {(snapshot.plan_type or '--').upper()}"
+    # Reserve the plan's space first so long addresses never hide it.
+    email_width = available_width - width(plan) - 8
+    if width(email) > email_width:
+        prefix = email
+        while prefix and width(prefix + "...") > email_width:
+            prefix = prefix[:-1]
+        email = prefix + "..."
+    if email:
+        draw.text((left, text_y(email)), email, font=font, fill=color)
+    draw.text((right - width(plan) + 1, text_y(plan)), plan, font=font, fill=color)
+
+
 def _draw_text_centered_at(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -438,13 +475,14 @@ def _render_neon(
     # Leave a few pixels of physical safe area below the footer; the MiniToo
     # can crop the last row or two at the bottom edge depending on alignment.
     draw.line((8, 111, WIDTH - 8, 111), fill=(31, 42, 63), width=1)
-    updated = display_text("CODEX LIVE", language)
-    draw.text((9, 115), updated, font=font, fill=(112, 132, 166))
-    plan = (snapshot.plan_type or "PLAN").upper()[:6]
-    footer = f"PLAN {plan}"
-    footer_width = draw.textbbox((0, 0), footer, font=font)[2]
-    draw.text((WIDTH - footer_width - 9, 115), footer, font=font, fill=(112, 132, 166))
+    _draw_account_footer(draw, snapshot, (112, 132, 166))
     return image
+
+
+def _pixel_text_width(text: str, scale: int = 1) -> int:
+    """Measure bitmap text, including the wider email at-sign."""
+    advances = sum(len(_PIXEL_GLYPHS.get(character, _PIXEL_GLYPHS["?"])[0]) + 1 for character in text.upper())
+    return max(0, (advances - 1) * scale)
 
 
 def _draw_pixel_text(
@@ -455,12 +493,11 @@ def _draw_pixel_text(
     color: tuple[int, int, int] | int,
     scale: int = 1,
 ) -> int:
-    """Draw a tiny 3x5 bitmap font and return the occupied width."""
+    """Draw a tiny bitmap font and return the occupied width."""
     text = text.upper()
-    advance = 4 * scale
-    for character_index, character in enumerate(text):
+    glyph_x = x
+    for character in text:
         pattern = _PIXEL_GLYPHS.get(character, _PIXEL_GLYPHS["?"])
-        glyph_x = x + character_index * advance
         for row, pixels in enumerate(pattern):
             for column, pixel in enumerate(pixels):
                 if pixel == "1":
@@ -473,7 +510,8 @@ def _draw_pixel_text(
                         ),
                         fill=color,
                     )
-    return max(0, len(text) * advance - scale)
+        glyph_x += (len(pattern[0]) + 1) * scale
+    return _pixel_text_width(text, scale)
 
 
 def _draw_pixel_centered_text(
@@ -484,7 +522,7 @@ def _draw_pixel_centered_text(
     color: tuple[int, int, int],
     scale: int = 1,
 ) -> None:
-    width = max(0, len(text) * 4 * scale - scale)
+    width = _pixel_text_width(text, scale)
     _draw_pixel_text(draw, text, center_x - width // 2, y, color, scale=scale)
 
 
@@ -655,10 +693,7 @@ def _render_pixel_art(
         _draw_pixel_window(draw, window, box, now, ACCENTS[min(index, len(ACCENTS) - 1)], language)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=(35, 56, 82), width=1)
-    _draw_pixel_text(draw, display_text("CODEX LIVE", language), 9, 116, (102, 139, 174))
-    plan = (snapshot.plan_type or "PLAN").upper()[:7]
-    plan_width = len(f"PLAN {plan}") * 4 - 1
-    _draw_pixel_text(draw, f"PLAN {plan}", WIDTH - 9 - plan_width, 116, (102, 139, 174))
+    _draw_account_footer(draw, snapshot, (102, 139, 174), pixel_art=True)
     return image
 
 
@@ -670,7 +705,7 @@ class _PixelFont(ImageFont.ImageFont):
         self.scale = 2 if size >= 10 else 1
 
     def getbbox(self, text: str, *args: object, **kwargs: object) -> tuple[int, int, int, int]:
-        width = max(0, len(text) * 4 * self.scale - self.scale)
+        width = _pixel_text_width(text, self.scale)
         return (0, 0, width, self.height)
 
     def getlength(self, text: str, *args: object, **kwargs: object) -> float:
@@ -885,7 +920,6 @@ def _render_anime(
     title_font = _anime_font(12, bold=True, pixel_art=pixel_art)
     status_font = _anime_font(10, bold=True, pixel_art=pixel_art)
     caption_font = _anime_font(7, pixel_art=pixel_art)
-    footer_font = _anime_font(8, bold=True, pixel_art=pixel_art)
 
     # Keep a compact palette-matched frame around the portrait and usage.
     draw.rectangle((2, 2, WIDTH - 3, HEIGHT - 3), outline=palette.dark, width=2)
@@ -937,11 +971,7 @@ def _render_anime(
         draw.text((104, 74), display_text("DATA", language), font=message_font, fill=palette.primary)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=palette.light, width=1)
-    draw.text((10, 112), display_text("CODEX USAGE", language), font=footer_font, fill=palette.footer)
-    plan = (snapshot.plan_type or "PLAN").upper()[:7]
-    footer = f"PLAN {plan}"
-    footer_width = draw.textbbox((0, 0), footer, font=footer_font)[2]
-    draw.text((WIDTH - footer_width - 10, 112), footer, font=footer_font, fill=palette.footer)
+    _draw_account_footer(draw, snapshot, palette.footer, pixel_art=pixel_art)
     return image
 
 
@@ -983,11 +1013,7 @@ def _render_neon_reset_credits(snapshot: UsageSnapshot, now: datetime, language:
         draw.text((73, 60), display_text("DATE N/A", language), font=title_font, fill=(255, 190, 76))
 
     draw.line((8, 111, WIDTH - 8, 111), fill=(31, 42, 63), width=1)
-    draw.text((9, 115), display_text("CODEX LIVE", language), font=font, fill=(112, 132, 166))
-    plan = (snapshot.plan_type or "PLAN").upper()[:6]
-    footer = f"PLAN {plan}"
-    footer_width = draw.textbbox((0, 0), footer, font=font)[2]
-    draw.text((WIDTH - footer_width - 9, 115), footer, font=font, fill=(112, 132, 166))
+    _draw_account_footer(draw, snapshot, (112, 132, 166))
     return image
 
 
@@ -1026,10 +1052,7 @@ def _render_pixel_reset_credits(
         _draw_pixel_centered_text(draw, display_text("EXPIRY DATE N/A", language), 80, 72, (255, 195, 76), scale=2)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=(35, 56, 82), width=1)
-    _draw_pixel_text(draw, display_text("CODEX LIVE", language), 9, 116, (102, 139, 174))
-    plan = (snapshot.plan_type or "PLAN").upper()[:7]
-    plan_width = len(f"PLAN {plan}") * 4 - 1
-    _draw_pixel_text(draw, f"PLAN {plan}", WIDTH - 9 - plan_width, 116, (102, 139, 174))
+    _draw_account_footer(draw, snapshot, (102, 139, 174), pixel_art=True)
     return image
 
 
@@ -1081,12 +1104,7 @@ def _render_anime_reset_credits(
         _draw_centered_text(draw, display_text("EXPIRY DATE N/A", language), small_font, 93, 152, 74, palette.setup)
 
     draw.line((8, 111, WIDTH - 8, 111), fill=palette.light, width=1)
-    footer_font = _anime_font(8, bold=True, pixel_art=pixel_art)
-    draw.text((10, 112), display_text("RESET CREDITS", language), font=footer_font, fill=palette.footer)
-    plan = (snapshot.plan_type or "PLAN").upper()[:7]
-    footer = f"PLAN {plan}"
-    footer_width = draw.textbbox((0, 0), footer, font=footer_font)[2]
-    draw.text((WIDTH - footer_width - 10, 112), footer, font=footer_font, fill=palette.footer)
+    _draw_account_footer(draw, snapshot, palette.footer, pixel_art=pixel_art)
     return image
 
 

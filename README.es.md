@@ -2,7 +2,7 @@
 
 [English](README.md) | [Español](README.es.md)
 
-Muestra el uso de Codex, los horarios de recarga, la actividad y los créditos de reset disponibles en una Divoom MiniToo o TimeBox Mini. El monitor consulta la cuenta iniciada mediante Codex App Server local. MiniToo recibe un panel de 160 × 128 píxeles; TimeBox Mini muestra una pantalla compacta para su matriz LED de 11 × 11.
+Muestra el uso de Codex, los horarios de recarga, la actividad y los créditos de reset disponibles en una Divoom MiniToo o TimeBox Mini. El monitor consulta la cuenta iniciada mediante Codex App Server local. MiniToo recibe un panel de 160 × 128 píxeles con el correo y el plan de la cuenta en el pie; TimeBox Mini muestra una pantalla compacta para su matriz LED de 11 × 11.
 
 Esta versión funciona en **macOS**. MiniToo incluye seis temas: **neón**, **pixel art**, **anime**, **anime-pixel** (adulta con el estilo de dibujo de chibi), **anime-pixel-chibi** y **anime-pixel-detail** (adulta detallada). TimeBox Mini usa un diseño compacto para su matriz de 11 × 11, con varios colores de acento opcionales. [Ver los temas](#temas-y-colores).
 
@@ -110,7 +110,7 @@ El idioma se aplica a los menús, la ayuda, los mensajes del monitor y las panta
 
 ## Temas y colores
 
-Estas vistas previas se generan con los mismos renderizadores que usan ambos dispositivos. Los porcentajes y los conteos de resets son ejemplos. La galería muestra MiniToo; usa `./start --device timebox-mini` para el diseño compacto de TimeBox Mini.
+Estas vistas previas se generan con los mismos renderizadores que usan ambos dispositivos. Los porcentajes y los conteos de resets son ejemplos; `CODER@EXAMPLE.COM` es un correo ficticio. La galería muestra MiniToo; usa `./start --device timebox-mini` para el diseño compacto de TimeBox Mini.
 
 | Neón (primera ejecución) | Pixel art |
 | --- | --- |
@@ -240,11 +240,14 @@ Por ejemplo, selecciona el verde así:
 - El porcentaje grande y la barra principal muestran el **uso restante**. Empiezan en 100 % y disminuyen a medida que usas Codex.
 - La barra vertical delgada junto a cada ventana muestra **el tiempo que falta para el próximo refill**. Disminuye conforme se acerca.
 - **RECARGA** (RESET en inglés) muestra la hora local estimada de recarga para una ventana corta o la fecha local para una ventana más larga.
+- El pie muestra el correo de la cuenta en **MAYÚSCULAS** a la izquierda y el **PLAN** a la derecha, en todos los temas de MiniToo y en las pantallas de reinicios. Los correos largos se acortan con `...` para conservar visible el plan. Si el correo no está disponible, se omite.
 - **ACTIVO** (WORK/WORKING en inglés) indica que un hook instalado detectó un turno de Codex activo. **REPOSO** (IDLE en inglés) indica que no hay turnos activos. **CONFIG** (SETUP en inglés) significa que todavía no se detectaron hooks de actividad. Si solo hay una ventana de uso, los temas anime muestran un medidor vertical más alto junto al retrato.
 
 Por ejemplo, así se ve el tema anime con una sola ventana de uso Pro:
 
 ![Tema anime con una sola ventana de uso Pro vertical](docs/images/anime-single-window-es.png)
+
+El correo se consulta mediante `account/read` del mismo Codex App Server/perfil local que devuelve las cuotas, en cada actualización de uso. No necesitas ninguna opción adicional. Si falla esta consulta opcional, el uso y los reinicios siguen mostrándose junto con el plan.
 
 ### TimeBox Mini
 
@@ -369,12 +372,12 @@ Los demás hooks de esos perfiles se conservan. Este comando no elimina el entor
 
 ## Privacidad y mantenimiento de la galería
 
-El monitor no lee ni guarda tokens de acceso. Los hooks de actividad guardan identificadores de sesión y de turno con sus fechas y horas; no guardan prompts, respuestas ni resultados de herramientas. Los datos de uso se consultan localmente mediante Codex App Server y se representan en imágenes para la pantalla.
+El monitor no lee ni guarda tokens de acceso. Los hooks de actividad guardan identificadores de sesión y de turno con sus fechas y horas; no guardan prompts, respuestas ni resultados de herramientas. Los datos de uso y el correo se consultan localmente mediante Codex App Server y se representan en las imágenes de MiniToo. El generador de la galería solo usa valores de ejemplo y un correo ficticio; no consulta tu cuenta.
 
 Después de cambiar un renderizador, regenera las imágenes de ejemplo del README con:
 
 ```sh
-.venv/bin/python scripts/generate_theme_gallery.py
+.venv/bin/python scripts/generate_theme_gallery.py --language all
 ```
 
 

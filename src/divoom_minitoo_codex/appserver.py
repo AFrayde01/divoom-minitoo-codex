@@ -8,7 +8,7 @@ import select
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +42,7 @@ class UsageSnapshot:
     plan_type: str | None
     windows: tuple[UsageWindow, ...]
     reset_credits: ResetCredits = ResetCredits()
+    account_email: str | None = field(default=None, repr=False)
 
 
 def _window_label(minutes: int | None, fallback: str) -> str:
@@ -197,7 +198,21 @@ class CodexAppServer:
         result = self._request("account/rateLimits/read", {})
         if not isinstance(result, dict):
             raise AppServerError("Codex App Server returned an invalid usage response.")
-        return parse_usage_result(result)
+        snapshot = parse_usage_result(result)
+        # Query the same App Server/profile as the quotas. Do not read auth
+        # files or retain a previous account's email if this lookup fails.
+        try:
+            account_result = self._request("account/read", {"refreshToken": False})
+        except AppServerError:
+            return snapshot  # Account identity is optional; keep usage available.
+        account = account_result.get("account") if isinstance(account_result, dict) else None
+        if not isinstance(account, dict) or account.get("type") != "chatgpt":
+            return snapshot
+        email = account.get("email")
+        if not isinstance(email, str):
+            return snapshot
+        email = "".join(character for character in email if character.isprintable()).strip()
+        return replace(snapshot, account_email=email or None)
 
     def close(self) -> None:
         process = self.process

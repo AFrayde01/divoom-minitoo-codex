@@ -95,7 +95,9 @@ def save_minitoo_gallery(snapshot: UsageSnapshot, now: datetime, activity: Codex
         save_anime_animation(
             render_usage_frames(snapshot, now, activity, theme=theme, language=language), f"{theme}-demo{suffix}.gif"
         )
-        single_window = UsageSnapshot(plan_type="pro", windows=(snapshot.windows[1],))
+        single_window = UsageSnapshot(
+            plan_type="pro", windows=(snapshot.windows[1],), account_email=snapshot.account_email,
+        )
         if theme in ("anime-pixel", "anime-pixel-detail"):
             save_anime_animation(
                 render_usage_frames(
@@ -122,6 +124,7 @@ def main() -> None:
     now = datetime(2026, 9, 29, 12, 0).astimezone()
     snapshot = UsageSnapshot(
         plan_type="plus",
+        account_email="coder@example.com",
         windows=(
             UsageWindow("5H", 38, 300, int((now + timedelta(hours=3, minutes=10)).timestamp())),
             UsageWindow("7D", 21, 10_080, int((now + timedelta(days=4, hours=6)).timestamp())),
