@@ -47,6 +47,28 @@ def save_language(language: str) -> None:
     _save(preferences_path("minitoo").with_name("language.json"), {"language": language})
 
 
+def load_account_profile() -> Path | None:
+    path = preferences_path("minitoo").with_name("account.json")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if (
+        not isinstance(value, dict) or value.get("version") != 1
+        or not isinstance(value.get("codex_home"), str) or not value["codex_home"].strip()
+    ):
+        raise ValueError("Unsupported account preferences format.")
+    return Path(value["codex_home"]).expanduser().resolve()
+
+
+def save_account_profile(home: Path) -> None:
+    """Remember only the directory; never persist account metadata or tokens."""
+    _save(
+        preferences_path("minitoo").with_name("account.json"),
+        {"codex_home": str(home.expanduser().resolve())},
+    )
+
+
 def save_preferences(device: str, *, theme: str, color: str | None) -> None:
     _save(preferences_path(device), {"theme": theme, "color": color})
 

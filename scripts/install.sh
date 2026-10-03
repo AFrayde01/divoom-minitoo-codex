@@ -22,7 +22,7 @@ swiftc -O -module-cache-path build/swift-module-cache Sources/MiniTooBridge.swif
 swiftc -O -module-cache-path build/swift-module-cache Sources/TimeBoxMiniBridge.swift -framework IOBluetooth -framework Network -o build/timebox-mini-bridge
 swiftc -O -module-cache-path build/swift-module-cache Sources/BluetoothDevices.swift -framework IOBluetooth -o build/divoom-devices
 
-.venv/bin/python scripts/install_activity_hooks.py install --all-profiles
+.venv/bin/python scripts/install_activity_hooks.py setup "$@"
 
-echo "Installation complete. Review and trust the new hooks in each Codex profile with /hooks, then restart Codex."
+echo "Installation complete."
 echo "Run: ./start"

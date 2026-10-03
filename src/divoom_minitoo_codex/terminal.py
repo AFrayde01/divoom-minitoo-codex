@@ -47,7 +47,10 @@ class TerminalUI:
                 return text[:index] + "…" if index < len(text) - 1 or used > width else text
         return text
 
-    def choose(self, title: str, options: tuple[tuple[str, str], ...], default: str) -> str:
+    def choose(
+        self, title: str, options: tuple[tuple[str, str], ...], default: str,
+        *, show_values: bool = True,
+    ) -> str:
         """Navigate a live menu with arrows; fall back to line input if needed."""
         if not self.can_prompt:
             return default
@@ -58,14 +61,14 @@ class TerminalUI:
             descriptor = self.input_stream.fileno()
             previous = termios.tcgetattr(descriptor)
         except (ImportError, OSError, ValueError, AttributeError):
-            return self._choose_line(title, options, default)
+            return self._choose_line(title, options, default, show_values=show_values)
         selected = next(index for index, (value, _) in enumerate(options) if value == default)
         print(self._style(self._fit(f"  {title}"), "1;38;5;147"), file=self.stream)
 
         def draw() -> None:
             for index, (value, label) in enumerate(options):
-                row = f"  {'›' if index == selected else ' '} {index + 1}. {value}"
-                if label and label != value:
+                row = f"  {'›' if index == selected else ' '} {index + 1}. {value if show_values else label}"
+                if show_values and label and label != value:
                     row += f"  ·  {label}"
                 print(
                     "\r\033[2K" + self._style(self._fit(row), "1;38;5;117" if index == selected else "38;5;250"),
@@ -99,7 +102,9 @@ class TerminalUI:
             # Collapse the menu to the chosen value before showing the next one.
             self.stream.write(f"\033[{len(options) + 1}A\r\033[J")
             value, label = options[selected]
-            row = f"  ✓ {value}" + (f"  ·  {label}" if label and label != value else "")
+            row = f"  ✓ {value if show_values else label}"
+            if show_values and label and label != value:
+                row += f"  ·  {label}"
             print(self._style(self._fit(row), "38;5;117"), file=self.stream)
             print(file=self.stream, flush=True)
             return value
@@ -129,20 +134,24 @@ class TerminalUI:
             return "cancel" if not sequence else ""
         return key.decode("ascii", errors="ignore")
 
-    def _choose_line(self, title: str, options: tuple[tuple[str, str], ...], default: str) -> str:
+    def _choose_line(
+        self, title: str, options: tuple[tuple[str, str], ...], default: str,
+        *, show_values: bool = True,
+    ) -> str:
         selected = next(index for index, (value, _) in enumerate(options, 1) if value == default)
         names = {value.casefold(): value for value, _ in options}
         names.update({label.casefold(): value for value, label in options if label})
+        default_label = dict(options)[default] if not show_values else default
         print(self._style(f"  {title}", "1;38;5;147"), file=self.stream)
         for index, (value, label) in enumerate(options, 1):
             marker = "›" if value == default else " "
-            row = f"  {marker} {index}. {value}"
-            if label and label != value:
+            row = f"  {marker} {index}. {value if show_values else label}"
+            if show_values and label and label != value:
                 row += f"  ·  {label}"
             print(self._style(row, "38;5;117" if value == default else "38;5;250"), file=self.stream)
         while True:
             print(
-                self.tr("  Number or name [{selected}] (Enter keeps {default}): ", selected=selected, default=default),
+                self.tr("  Number or name [{selected}] (Enter keeps {default}): ", selected=selected, default=default_label),
                 end="", file=self.stream, flush=True,
             )
             answer = self.input_stream.readline()
@@ -171,7 +180,7 @@ class TerminalUI:
 
     def startup(
         self, *, device: str, theme: str, color: str, interval: int,
-        log_path: str, encoding: str | None = None,
+        log_path: str, encoding: str | None = None, profile: str | None = None,
     ) -> None:
         if not self.interactive:
             return
@@ -187,6 +196,9 @@ class TerminalUI:
         ]
         if encoding is not None:
             rows.append((self.tr("  Format   {encoding}", encoding=encoding), "38;5;117"))
+        if profile is not None:
+            profile = profile if len(profile) <= 44 else profile[:41] + "..."
+            rows.append((self.tr("  Account  {profile}", profile=profile), "38;5;117"))
         rows.extend((
             (self.tr("  Refresh  {interval}s  ·  activity hooks checked each second", interval=interval), "38;5;250"),
             (self.tr("  Output   {output}  ·  Ctrl+C to stop", output=self.tr("detailed" if self.detailed else "compact")), "38;5;250"),

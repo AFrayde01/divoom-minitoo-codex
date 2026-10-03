@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import shutil
 import subprocess
@@ -15,6 +16,14 @@ from typing import Any
 
 class AppServerError(RuntimeError):
     """Raised when Codex App Server cannot return account rate limits."""
+
+
+class AccountAuthenticationError(AppServerError):
+    """A profile's account request was rejected with HTTP 401."""
+
+    def __init__(self, message: str, *, codex_home: Path | None = None) -> None:
+        super().__init__(message)
+        self.codex_home = codex_home
 
 
 @dataclass(frozen=True)
@@ -43,6 +52,13 @@ class UsageSnapshot:
     windows: tuple[UsageWindow, ...]
     reset_credits: ResetCredits = ResetCredits()
     account_email: str | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class CodexAccount:
+    auth_type: str
+    email: str | None = field(default=None, repr=False)
+    plan_type: str | None = None
 
 
 def _window_label(minutes: int | None, fallback: str) -> str:
@@ -192,6 +208,30 @@ class CodexAppServer:
             self.close()
             raise
 
+    def read_account(self) -> CodexAccount | None:
+        """Read account identity without requesting a token refresh."""
+        if self.process is None:
+            self.start()
+        result = self._request("account/read", {"refreshToken": False})
+        if not isinstance(result, dict) or "account" not in result:
+            raise AppServerError("Codex App Server returned an invalid account response.")
+        account = result.get("account")
+        if account is None:
+            return None
+        if not isinstance(account, dict) or not isinstance(account.get("type"), str):
+            raise AppServerError("Codex App Server returned an invalid account response.")
+
+        def label(value: object) -> str | None:
+            if not isinstance(value, str):
+                return None
+            return "".join(character for character in value if character.isprintable()).strip() or None
+
+        return CodexAccount(
+            auth_type=account["type"],
+            email=label(account.get("email")),
+            plan_type=label(account.get("planType")),
+        )
+
     def read_usage(self) -> UsageSnapshot:
         if self.process is None:
             self.start()
@@ -202,17 +242,15 @@ class CodexAppServer:
         # Query the same App Server/profile as the quotas. Do not read auth
         # files or retain a previous account's email if this lookup fails.
         try:
-            account_result = self._request("account/read", {"refreshToken": False})
+            account = self.read_account()
         except AppServerError:
             return snapshot  # Account identity is optional; keep usage available.
-        account = account_result.get("account") if isinstance(account_result, dict) else None
-        if not isinstance(account, dict) or account.get("type") != "chatgpt":
+        if account is None or account.auth_type != "chatgpt":
             return snapshot
-        email = account.get("email")
-        if not isinstance(email, str):
-            return snapshot
-        email = "".join(character for character in email if character.isprintable()).strip()
-        return replace(snapshot, account_email=email or None)
+        return replace(
+            snapshot, account_email=account.email,
+            plan_type=snapshot.plan_type or account.plan_type,
+        )
 
     def close(self) -> None:
         process = self.process
@@ -242,6 +280,14 @@ class CodexAppServer:
             error = message.get("error")
             if error:
                 description = error.get("message", "unknown JSON-RPC error")
+                if (
+                    method.startswith("account/")
+                    and re.search(r"(?:^|\D)401(?:\D|$)", str(description))
+                    and "unauthorized" in str(description).casefold()
+                ):
+                    raise AccountAuthenticationError(
+                        f"Codex App Server: {description}", codex_home=self.codex_home,
+                    )
                 raise AppServerError(f"Codex App Server: {description}")
             if "result" not in message:
                 raise AppServerError("Codex App Server sent a response without a result.")

@@ -6,17 +6,27 @@ import argparse
 import hashlib
 import logging
 import os
+import shlex
 import sys
 import time
+from contextlib import ExitStack, contextmanager
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
 
-from .appserver import AppServerError, CodexAppServer
-from .activity import read_activity
+from .appserver import AccountAuthenticationError, AppServerError, CodexAppServer, UsageSnapshot
+from .activity import ACTIVITY_FILE, inspect_activity_hooks, read_activity
 from .bridge import MiniTooBridge, MiniTooError
 from .diagnostics import PrivateRotatingFileHandler, default_log_path, private_log_directory, secure_existing_log
 from .discovery import DiscoveryError, discover_devices, normalize_address
-from .preferences import load_preferences, save_preferences, load_language, save_language
+from .preferences import (
+    load_preferences, save_preferences, load_language, save_language,
+    load_account_profile, save_account_profile,
+)
+from .profiles import (
+    ProfileError, account_choices, account_identity, account_label,
+    discover_profiles, inspect_accounts, profile_name,
+)
 from .i18n import LANGUAGES, tr, translate_error
 from .terminal import TerminalUI
 from .minitoo_rgb import encode_rgb_animation
@@ -95,7 +105,11 @@ def _parser(language: str = "en") -> argparse.ArgumentParser:
     parser.add_argument(
         "--codex-home",
         type=Path,
-        help=t("Codex profile whose sign-in and usage limits should be queried."),
+        help=t("Codex profile to monitor; overrides the account selector and saved choice."),
+    )
+    parser.add_argument(
+        "--activity-scope", choices=("account", "all"), default="account",
+        help=t("Activity: selected account's local profiles (default), or all installed profiles."),
     )
     parser.add_argument(
         "--device",
@@ -139,6 +153,180 @@ def _parser(language: str = "en") -> argparse.ArgumentParser:
         help=t("Diagnostic log path (default: ~/Library/Logs/divoom-minitoo-codex/<device>-<port>.log; private, rotates at 1 MiB)."),
     )
     return parser
+
+
+def _configure_account(args: argparse.Namespace, terminal: TerminalUI) -> None:
+    t = terminal.tr
+    prompt = terminal.can_prompt and not args.no_prompt and not args.once and not args.preview
+    explicit = args.codex_home is not None
+    args.codex_profile_aliases = ()
+    args.codex_account_identity = None
+    saved: Path | None = None
+    environment_home: Path | None = None
+    if explicit:
+        home = args.codex_home.expanduser().resolve()
+    else:
+        try:
+            saved = load_account_profile()
+        except (OSError, ValueError) as exc:
+            terminal.report(t("Could not read the saved Codex profile. {detail}", detail=exc), error=True)
+            saved = None
+        raw_environment_home = os.environ.get("CODEX_HOME")
+        environment_home = Path(raw_environment_home).expanduser().resolve() if raw_environment_home else None
+        if not prompt:
+            home = environment_home or saved or (Path.home() / ".codex").resolve()
+        else:
+            profiles = discover_profiles(saved)
+            if not profiles:
+                raise ProfileError(t("No Codex profiles found. Sign in to Codex or provide --codex-home."))
+            if saved is not None and not saved.is_dir():
+                terminal.report(t("The saved Codex profile is no longer available. Choose another profile."), error=True)
+                saved = None
+            preferred = saved or environment_home or (Path.home() / ".codex").resolve()
+            terminal.step(t("Finding Codex profiles and verifying usage access…"))
+            accounts = inspect_accounts(
+                profiles, args.codex_bin,
+                on_profile=lambda profile: terminal.step(t(
+                    "Checking usage access: {name}…", name=t(profile.name),
+                )),
+            )
+            grouped = account_choices(accounts, preferred)
+            choices = [choice for choice in grouped if choice.primary.usage_verified]
+            for choice in grouped:
+                if choice.primary.usage_verified:
+                    continue
+                item = choice.primary
+                if isinstance(item.validation_error, AccountAuthenticationError):
+                    reason = t("Authentication rejected (401); sign-in required")
+                elif item.validation_error is not None:
+                    reason = translate_error(str(item.validation_error), args.language)
+                elif item.account is None:
+                    reason = t("Not signed in")
+                else:
+                    reason = t("No ChatGPT usage limits")
+                terminal.report(t("Omitted {name}: {reason}.", name=t(item.profile.name), reason=reason))
+            if not choices:
+                errors = [choice.primary.validation_error for choice in grouped]
+                if errors and all(isinstance(error, AccountAuthenticationError) for error in errors):
+                    raise errors[0]
+                raise ProfileError(t("No Codex profile returned live usage. Sign in to Codex or retry after checking the connection."))
+            terminal.report(t("Accounts with verified usage access: {count}.", count=len(choices)))
+            options = tuple(
+                (str(choice.primary.profile.home), account_label(choice.primary, args.language))
+                for choice in choices
+            )
+            default = next(
+                (str(choice.primary.profile.home) for choice in choices if any(
+                    profile.home == preferred for profile in choice.profiles
+                )),
+                options[0][0],
+            )
+            if len(options) == 1:
+                selected, label = options[0]
+                terminal.report(label)
+            else:
+                selected = terminal.choose(t("Codex · account"), options, default, show_values=False)
+            home = Path(selected)
+            choice = next(choice for choice in choices if choice.primary.profile.home == home)
+            args.codex_account_identity = account_identity(choice.primary.account)
+            args.codex_profile_aliases = tuple(
+                profile.home for profile in choice.profiles if profile.home != home
+            )
+    if not home.is_dir():
+        if not explicit and not prompt and saved is None and environment_home is None:
+            # Preserve Codex's implicit first-use behavior for its default home.
+            args.codex_home = None
+            args.codex_profile_name = t("Codex · default profile")
+            return
+        raise ProfileError(t(
+            "Codex profile directory not found: {path}. Run ./start interactively or provide --codex-home.",
+            path=home,
+        ))
+    args.codex_home = home
+    args.codex_profile_name = t(profile_name(home))
+    if explicit or not prompt:
+        terminal.report(t("Codex profile: {name}", name=args.codex_profile_name))
+
+
+def _report_activity_setup(args: argparse.Namespace, terminal: TerminalUI) -> None:
+    """Check every detected app profile because activity is shared across them."""
+    t = terminal.tr
+    state_file = (args.activity_file or Path(os.environ.get("CODEX_MINITOO_ACTIVITY_FILE", ACTIVITY_FILE))).expanduser().resolve()
+    extra_home = args.codex_home
+    if extra_home is None:
+        try:
+            extra_home = load_account_profile()
+        except (OSError, ValueError):
+            # Account configuration reports an unreadable preference next.
+            pass
+    missing = False
+    for profile in discover_profiles(extra_home):
+        status = inspect_activity_hooks(profile.home, state_file)
+        if not status.configured:
+            missing = True
+            terminal.report(t(
+                "Activity hooks need attention in {name}: {reason}.",
+                name=t(profile.name), reason=t(status.reason),
+            ), error=True)
+    if missing:
+        installer = Path(__file__).resolve().parents[2] / "scripts/install_activity_hooks.py"
+        if installer.is_file():
+            command = (
+                f"{shlex.quote(sys.executable)} {shlex.quote(str(installer))} install --all-profiles "
+                f"--state-file {shlex.quote(str(state_file))}"
+            )
+            terminal.report(t("Hook installation command: {command}", command=command))
+        else:
+            terminal.report(t("Run scripts/install_activity_hooks.py install --all-profiles from the repository."))
+        terminal.report(t("Review and trust the new hooks with /hooks in each affected profile, then restart that Parall instance."))
+
+
+@contextmanager
+def _connect_account(
+    args: argparse.Namespace, report: Callable[..., None],
+) -> Iterator[tuple[CodexAppServer, UsageSnapshot, Path | None]]:
+    """On a startup 401, try only aliases with a freshly matching identity."""
+    t = lambda text, **values: tr(text, args.language, **values)
+    candidates = (args.codex_home, *args.codex_profile_aliases)
+    last_auth_error: AccountAuthenticationError | None = None
+    for index, home in enumerate(candidates):
+        stack = ExitStack()
+        try:
+            codex = stack.enter_context(CodexAppServer(args.codex_bin, codex_home=home))
+            if index:
+                report(t("Trying another profile for the selected account: {name}.", name=t(profile_name(home))))
+                identity = account_identity(codex.read_account())
+                if identity is None or identity != args.codex_account_identity:
+                    report(t("Skipping {name}: its account no longer matches the selected account.", name=t(profile_name(home))))
+                    stack.close()
+                    continue
+            snapshot = codex.read_usage()
+        except AccountAuthenticationError as exc:
+            stack.close()
+            last_auth_error = exc
+            if index + 1 < len(candidates):
+                report(t("Authentication rejected for {name}; trying a matching profile.", name=t(profile_name(home))), error=True)
+            continue
+        except AppServerError as exc:
+            stack.close()
+            if not index:
+                raise
+            report(t(
+                "Could not use matching profile {name}. {detail}",
+                name=t(profile_name(home)), detail=translate_error(str(exc), args.language),
+            ), error=True)
+            continue
+        except BaseException:
+            stack.close()
+            raise
+        try:
+            yield codex, snapshot, home
+        finally:
+            stack.close()
+        return
+    if last_auth_error is not None:
+        raise last_auth_error
+    raise ProfileError(t("The selected account is no longer available. Restart ./start to select it again."))
 
 
 def _resolve_device(args: argparse.Namespace, terminal: TerminalUI) -> None:
@@ -323,6 +511,9 @@ def main() -> int:
                 save_language(args.language)
             except OSError as exc:
                 report(t("Could not save language; this monitor will still run. {detail}", detail=exc), error=True)
+        if not args.preview:
+            _report_activity_setup(args, terminal)
+        _configure_account(args, terminal)
         _resolve_device(args, terminal)
         _configure_display(args, terminal)
         if not args.preview:
@@ -347,13 +538,27 @@ def main() -> int:
                 interval=args.interval,
                 log_path=str(log_path),
                 encoding="RGB444" if args.device == "timebox-mini" else "RGB888 / Zstandard" if args.encoding == "rgb" else "JPEG",
+                profile=args.codex_profile_name,
             )
             if not terminal.interactive:
                 report(t("Diagnostic log: {path}", path=log_path))
             logger.info("Monitor starting: device=%s theme=%s port=%s", args.device, args.theme, bridge_port)
             terminal.step(t("Connecting to Codex and reading account usage…"))
-        with CodexAppServer(args.codex_bin, codex_home=args.codex_home) as codex:
+        with _connect_account(args, report) as (codex, snapshot, selected_home):
+            account_homes = tuple(dict.fromkeys((
+                selected_home or (Path.home() / ".codex").resolve(),
+                *args.codex_profile_aliases,
+            )))
+            activity_homes = account_homes if args.activity_scope == "account" else None
+            if selected_home != args.codex_home:
+                args.codex_home = selected_home
+                args.codex_profile_name = t(profile_name(selected_home))
+                report(t("Using matching Codex profile: {name}.", name=args.codex_profile_name))
             if not args.preview:
+                report(t(
+                    "Activity follows the selected account's local profiles."
+                    if activity_homes is not None else "Activity follows all installed local profiles."
+                ))
                 bridge_path = args.bridge or _default_bridge(args.device)
                 default_port = 40585 if args.device == "timebox-mini" else 40584
                 bridge_port = args.port if args.port is not None else default_port
@@ -370,7 +575,11 @@ def main() -> int:
                 device_name = "TimeBox Mini" if args.device == "timebox-mini" else "MiniToo"
                 report(t("Monitoring {device} at {address}; reading Codex usage every {interval}s.", device=device_name, address=args.address, interval=args.interval))
 
-            snapshot = codex.read_usage()
+            if not args.once and not args.preview and args.codex_home is not None:
+                try:
+                    save_account_profile(args.codex_home)
+                except OSError as exc:
+                    report(t("Could not save the Codex profile; this monitor will still run. {detail}", detail=exc), error=True)
             if not args.preview:
                 terminal.step(t("Usage received. Connecting to the authenticated Bluetooth bridge…"))
             next_usage_read = time.monotonic() + args.interval
@@ -383,7 +592,7 @@ def main() -> int:
             previous_timebox_view: str | None = None
             timebox_working_started_at: float | None = None
             while True:
-                activity = read_activity(args.activity_file)
+                activity = read_activity(args.activity_file, codex_homes=activity_homes)
                 activity_state = (activity.working, activity.hooks_installed)
                 turn_finished = (
                     previous_activity_state is not None
@@ -589,7 +798,19 @@ def main() -> int:
                 if remaining > 0:
                     # Check activity each second; read usage on the configured interval.
                     time.sleep(min(1, remaining))
-    except (AppServerError, MiniTooError, DiscoveryError, OSError) as exc:
+    except AccountAuthenticationError as exc:
+        home = exc.codex_home or args.codex_home or (Path.home() / ".codex").resolve()
+        report(t(
+            "Codex rejected authentication for {name} (401). Sign in again to this profile, then restart the monitor.",
+            name=t(profile_name(home)),
+        ), error=True)
+        report(t("Codex profile directory: {path}", path=home))
+        command = f"CODEX_HOME={shlex.quote(str(home))} {shlex.quote(args.codex_bin)} login"
+        report(t("Sign-in command: {command}", command=command))
+        if logger is not None:
+            logger.error("%s", exc)
+        return 1
+    except (AppServerError, MiniTooError, DiscoveryError, ProfileError, OSError) as exc:
         report(translate_error(str(exc), args.language), error=True)
         return 1
     except EOFError:

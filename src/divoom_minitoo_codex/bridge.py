@@ -85,7 +85,7 @@ class MiniTooBridge:
         self._supports_rgb = False
         if not self.executable.is_file():
             raise MiniTooError(
-                f"Bluetooth bridge not found at {self.executable}. Run scripts/install.sh first."
+                f"Bluetooth bridge not found at {self.executable}. Run ./install first."
             )
         try:
             self._auth_token = secrets.token_hex(32)
@@ -129,7 +129,7 @@ class MiniTooBridge:
                     self.close()
                     raise MiniTooError(
                         f"The {self.display_name} bridge is outdated and does not authenticate local requests. "
-                        "Rebuild it with scripts/install.sh, then restart the monitor."
+                        "Rebuild it with ./install, then restart the monitor."
                     )
                 return
         diagnostics = self._bridge_diagnostics()
@@ -137,7 +137,7 @@ class MiniTooBridge:
         detail = f" Details: {diagnostics}." if diagnostics else ""
         raise MiniTooError(
             f"{self.display_name} bridge did not start listening on localhost:{self.port} within 15 seconds."
-            + " Rebuild the authenticated bridges with scripts/install.sh if upgrading."
+            + " Rebuild the authenticated bridges with ./install if upgrading."
             + detail
         )
 
@@ -168,7 +168,7 @@ class MiniTooBridge:
         if self._auth_token is None:
             raise MiniTooError("The local bridge has no authentication credential. Restart the monitor.")
         if self.frame_encoding == "rgb-zstd" and not self._supports_rgb:
-            raise MiniTooError("The MiniToo bridge does not support RGB888/Zstandard. Rebuild it with scripts/install.sh before sending RGB.")
+            raise MiniTooError("The MiniToo bridge does not support RGB888/Zstandard. Rebuild it with ./install before sending RGB.")
         request_body["authToken"] = self._auth_token
         request = json.dumps(request_body, separators=(",", ":")).encode() + b"\n"
         stage = "connecting to the local bridge"
