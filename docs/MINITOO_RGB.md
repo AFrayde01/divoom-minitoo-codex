@@ -29,7 +29,7 @@ The ignored `build/minitoo-native-rgb-check/` directory contains exact `.payload
 
 ## Use RGB in the monitor
 
-Update the installation with `./scripts/install.sh` to install the `zstandard` Python dependency and rebuild the authenticated bridge, then start:
+Update the installation with `./install` to install the `zstandard` Python dependency and rebuild the authenticated bridge, then start:
 
 ```sh
 .venv/bin/codex-minitoo --address AA:BB:CC:DD:EE:FF --theme anime-pixel --color green

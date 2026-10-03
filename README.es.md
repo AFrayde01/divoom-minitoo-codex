@@ -23,12 +23,16 @@ Clona este repositorio desde Terminal y ejecuta:
 ```sh
 git clone https://github.com/AFrayde01/divoom-minitoo-codex.git
 cd divoom-minitoo-codex
-./scripts/install.sh
+./install
 ```
 
-El instalador crea un entorno virtual de Python, compila los puentes Bluetooth para ambos modelos Divoom e instala los hooks de actividad de Codex. Instala los hooks en `CODEX_HOME` (o `~/.codex`) y en cada perfil de Codex App que encuentre en `~/Library/Application Support/Parall/ChatGPT*/.codex`. Todos los perfiles comparten el mismo archivo local de actividad.
+El instalador crea un entorno virtual de Python y compila los puentes Bluetooth para ambos modelos Divoom. Después pregunta si quieres instalar los hooks de actividad de Codex en todos los perfiles detectados o elegir uno. Usa **↑ / ↓** y **Enter**, igual que los menús de `./start`. Busca `CODEX_HOME` (o `~/.codex`) y cada perfil en `~/Library/Application Support/Parall/*/.codex`, incluidas las instancias de Codex y ChatGPT. Todos los perfiles instalados comparten el mismo archivo local de actividad, con cada evento identificado por su perfil de origen. Al reinstalar se conservan las definiciones idénticas y se respaldan las modificadas. El estado de actividad se actualiza con el mismo bloqueo que utilizan los hooks en ejecución.
 
-Codex requiere que revises y autorices los hooks que no administra antes de ejecutarlos. En cada perfil que uses, inicia una sesión de Codex CLI con su `CODEX_HOME`, ejecuta `/hooks`, revisa y autoriza los hooks de Divoom y luego reinicia ese perfil. Para un perfil separado, inicia CLI así: `CODEX_HOME="/ruta/al/perfil/.codex" codex`. Antes de modificar un `hooks.json` existente, el instalador guarda una copia y conserva los demás hooks. Consulta la [guía de hooks de Codex](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks).
+Al terminar, la Terminal muestra un comando `CODEX_HOME=... codex` para cada perfil seleccionado. Abre cada uno, ejecuta `/hooks`, revisa y autoriza los hooks de Divoom, y después reinicia la instancia correspondiente de Codex o Parall. Codex exige esa revisión y el instalador no puede autorizar los hooks por ti. Antes de modificar un `hooks.json` existente, el instalador guarda una copia y conserva los demás hooks. Consulta la [guía de hooks de Codex](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks).
+
+Si usas varias cuentas locales y quieres que ACTIVO/REPOSO siga la cuenta que seleccionaste, instala los hooks en todos los perfiles y revísalos/autorízalos en cada instancia. Después, `--activity-scope account` (predeterminado) atribuye la actividad a la cuenta seleccionada. Usa `--activity-scope all` solo si quieres combinar la actividad de todos los perfiles con hooks instalados.
+
+El instalador interactivo recomienda instalar en todos los perfiles detectados. Para omitir el menú e instalarlos en todos, ejecuta `./install --all-profiles`; para instalar en un perfil conocido, ejecuta `./install --codex-home "/ruta/al/perfil/.codex"`. Si no hay una Terminal interactiva, instala en todos los perfiles detectados y muestra las instrucciones de autorización.
 
 Si después agregas otro perfil de Codex, instala sus hooks con:
 
@@ -37,9 +41,24 @@ Si después agregas otro perfil de Codex, instala sus hooks con:
   --codex-home "/ruta/al/perfil/.codex"
 ```
 
+Para revisar o reparar todos los perfiles detectados, incluidas las nuevas instancias de Parall:
+
+```sh
+.venv/bin/python scripts/install_activity_hooks.py status --all-profiles
+.venv/bin/python scripts/install_activity_hooks.py install --all-profiles
+```
+
+`status` revisa los cinco eventos de Divoom, las rutas de los scripts, el perfil de origen y el archivo de estado compartido. Devuelve un estado distinto de cero si falta configuración; no confirma la autorización de los hooks. El inicio también informa si hay configuraciones ausentes o rutas que no coinciden. En cada instancia afectada de Parall, abre CLI con su `CODEX_HOME`, revisa `/hooks` y reinicia esa instancia. Por ejemplo:
+
+```sh
+CODEX_HOME="$HOME/Library/Application Support/Parall/Codex (Personal)/.codex" codex
+```
+
 ## Actualizar una instalación existente
 
-Detén el monitor con `Ctrl+C`, actualiza tu copia del repositorio y ejecuta `./scripts/install.sh` de nuevo. Hay que recompilar **ambos puentes** para usar la autenticación local; un binario antiguo se rechazará con un mensaje de actualización. Reinicia el monitor después. Los hooks existentes conservan su configuración; revisa `/hooks` si Codex solicita confiar en un hook actualizado.
+Detén el monitor con `Ctrl+C`, actualiza tu copia del repositorio y ejecuta `./install` de nuevo. Hay que recompilar **ambos puentes** para usar la autenticación local; un binario antiguo se rechazará con un mensaje de actualización. Reinicia el monitor después. Los hooks existentes conservan su configuración; revisa `/hooks` si Codex solicita confiar en un hook actualizado.
+
+Para actualizar la actividad por perfil, ejecuta `./install` y elige todos los perfiles o uno cuando aparezca el menú. Para reparar únicamente los hooks sin recompilar los puentes, ejecuta directamente `.venv/bin/python scripts/install_activity_hooks.py setup`. Cada comando incluye su `--codex-home` de origen. La instalación elimina los registros antiguos sin perfil porque no se pueden atribuir con certeza; los nuevos mensajes crean registros nuevos. El monitor que sigue la cuenta seleccionada ignora esos registros antiguos incluso antes de reinstalar.
 
 La actualización también instala el compresor RGB sin pérdida y reconstruye el puente MiniToo con soporte RGB. **RGB888/Zstandard sin pérdida es ahora el formato predeterminado del MiniToo**, a su resolución nativa de 160 × 128. Ya no necesitas agregar `--encoding rgb`. Usa `--encoding jpeg` para seleccionar JPEG explícitamente. [Guía RGB y prueba de pantalla nativa](docs/MINITOO_RGB.md).
 
@@ -66,7 +85,7 @@ Inicia el monitor continuo con:
 ./start
 ```
 
-Si macOS tiene una sola Divoom compatible emparejada, se seleccionan automáticamente su dirección y modelo. Si hay varias, escoge la bocina en el menú; las conectadas aparecen primero y MiniToo tiene prioridad cuando el estado de conexión es igual. Estar conectada no garantiza que su canal de imágenes esté libre, ni que una bocina emparejada pero desconectada esté encendida. Después podrás escoger tema y color, con tus últimas opciones preseleccionadas. El primer tema de MiniToo es **neón**. TimeBox Mini usa su diseño compacto y ofrece sus colores de acento.
+Después de elegir el idioma, el inicio ofrece un selector de cuentas de Codex cuando hay varias opciones de cuenta disponibles, incluidas las instancias de Parall, con el correo y el plan cuando estén disponibles. Después, si macOS tiene una sola Divoom compatible emparejada, se seleccionan automáticamente su dirección y modelo. Si hay varias, escoge la bocina en el menú; las conectadas aparecen primero y MiniToo tiene prioridad cuando el estado de conexión es igual. Estar conectada no garantiza que su canal de imágenes esté libre, ni que una bocina emparejada pero desconectada esté encendida. Después podrás escoger tema y color, con tus últimas opciones preseleccionadas. El primer tema de MiniToo es **neón**. TimeBox Mini usa su diseño compacto y ofrece sus colores de acento.
 
 Para mostrar solo dispositivos TimeBox Mini:
 
@@ -78,8 +97,8 @@ Deja Terminal abierta mientras se ejecuta; puedes detener el monitor con `Ctrl+C
 
 ### Selección inicial y salida de Terminal
 
-- Usa **↑ / ↓** para recorrer idiomas, bocinas, temas y colores, y **Enter** para seleccionar. Los números **1–9** saltan a una opción; **Esc / Q** o **Ctrl+C** cancelan. Presiona Enter directamente para conservar la opción resaltada. Si Terminal no admite el modo de teclas, se usa entrada por número/nombre. Los temas anime comienzan con morado; TimeBox Mini comienza con cian. Neón y el tema pixel art del robot usan paletas fijas.
-- Los valores explícitos de `--language`, `--theme` y `--color` tienen prioridad y omiten sus preguntas respectivas. Las ejecuciones continuas recuerdan tema/color por separado para cada dispositivo y un idioma común.
+- Usa **↑ / ↓** para recorrer idiomas, cuentas, bocinas, temas y colores, y **Enter** para seleccionar. Los números **1–9** saltan a una opción; **Esc / Q** o **Ctrl+C** cancelan. Presiona Enter directamente para conservar la opción resaltada. Si Terminal no admite el modo de teclas, se usa entrada por número/nombre. Los temas anime comienzan con morado; TimeBox Mini comienza con cian. Neón y el tema pixel art del robot usan paletas fijas.
+- Los valores explícitos de `--language`, `--codex-home`, `--theme` y `--color` tienen prioridad y omiten sus preguntas respectivas. Las ejecuciones continuas recuerdan tema/color por separado para cada dispositivo, un idioma común y el último perfil que devolvió el uso correctamente.
 - Agrega `--no-prompt` para iniciar directamente con los parámetros o preferencias guardadas. `--once`, `--preview`, la entrada/salida redirigida y `TERM=dumb` también omiten el menú; once/preview no cambian las preferencias guardadas.
 - Sin menú, la detección debe encontrar una sola bocina compatible; si hay varias, especifica `--device` o `--address`. Una dirección explícita (o `MINITOO_ADDRESS`) omite la detección; sin indicar modelo, esa dirección usa MiniToo. La vista previa usa MiniToo por defecto y no lee Bluetooth.
 - Los envíos **actualizan una sola línea de estado** por defecto. Muestra la hora del último envío, cuota restante, actividad y pantalla actual. El texto largo se recorta al ancho de Terminal; los errores y el archivo de diagnóstico conservan los detalles completos.
@@ -92,7 +111,7 @@ Por ejemplo:
 ./start --sent detailed
 ```
 
-Las preferencias se guardan localmente en `~/Library/Application Support/divoom-minitoo-codex/minitoo.json` o `timebox-mini.json`. Estos archivos privados solo contienen tema y color. El idioma común para CLI/pantalla se guarda en `language.json` dentro del mismo directorio. Si no pueden guardarse, el monitor continúa y muestra un aviso.
+Las preferencias se guardan localmente en `~/Library/Application Support/divoom-minitoo-codex/minitoo.json` o `timebox-mini.json`. Estos archivos privados solo contienen tema y color. El idioma común para CLI/pantalla se guarda en `language.json` y la ruta del perfil de Codex seleccionado en `account.json`, dentro del mismo directorio. Si no pueden guardarse, el monitor continúa y muestra un aviso.
 
 `./start` usa el entorno virtual del repositorio sin tener que activarlo. Después de instalar también están disponibles `.venv/bin/divoom-codex start` y el comando anterior `.venv/bin/codex-minitoo`, con las mismas opciones. Si no se detecta una bocina en una Terminal interactiva, el menú permite volver a buscar después de emparejarla o escribir la dirección manualmente.
 
@@ -104,7 +123,7 @@ Para ejecutar el CLI y todos los temas de MiniToo en español:
 ./start --language es
 ```
 
-Usa `--language en` para inglés, o `--lang` como alias. `./start` ofrece un selector **Language / Idioma** antes de elegir bocina, tema y color, con la última selección resaltada. La primera opción es inglés. `--no-prompt` recupera el idioma guardado; un parámetro explícito tiene prioridad. Las ejecuciones continuas guardan el idioma; `--once`, `--preview` y `--help` no modifican las preferencias.
+Usa `--language en` para inglés, o `--lang` como alias. `./start` ofrece un selector **Language / Idioma** antes de elegir cuenta, bocina, tema y color, con la última selección resaltada. La primera opción es inglés. `--no-prompt` recupera el idioma guardado; un parámetro explícito tiene prioridad. Las ejecuciones continuas guardan el idioma; `--once`, `--preview` y `--help` no modifican las preferencias.
 
 El idioma se aplica a los menús, la ayuda, los mensajes del monitor y las pantallas de uso y reinicios de todos los temas. En español, las fechas usan **día/mes** (con año de dos cifras en la lista de reinicios); las horas conservan el formato de 24 horas. En la pantalla aparecen **ACTIVO**, **REPOSO**, **RECARGA** y **REINICIOS**. TimeBox Mini mantiene sus números y barras, que no dependen del idioma. Los parámetros como `green` o `anime-pixel` no cambian; los detalles nativos de Bluetooth/protocolo se conservan literalmente para diagnóstico.
 
@@ -241,7 +260,7 @@ Por ejemplo, selecciona el verde así:
 - La barra vertical delgada junto a cada ventana muestra **el tiempo que falta para el próximo refill**. Disminuye conforme se acerca.
 - **RECARGA** (RESET en inglés) muestra la hora local estimada de recarga para una ventana corta o la fecha local para una ventana más larga.
 - El pie muestra el correo de la cuenta en **MAYÚSCULAS** a la izquierda y el **PLAN** a la derecha, en todos los temas de MiniToo y en las pantallas de reinicios. Los correos largos se acortan con `...` para conservar visible el plan. Si el correo no está disponible, se omite.
-- **ACTIVO** (WORK/WORKING en inglés) indica que un hook instalado detectó un turno de Codex activo. **REPOSO** (IDLE en inglés) indica que no hay turnos activos. **CONFIG** (SETUP en inglés) significa que todavía no se detectaron hooks de actividad. Si solo hay una ventana de uso, los temas anime muestran un medidor vertical más alto junto al retrato.
+- **ACTIVO** (WORK/WORKING en inglés) indica que un hook instalado detectó un turno de Codex dentro del alcance de actividad seleccionado. **REPOSO** (IDLE en inglés) indica que no hay turnos activos. **CONFIG** (SETUP en inglés) significa que no se detectaron hooks de actividad coincidentes. Si solo hay una ventana de uso, los temas anime muestran un medidor vertical más alto junto al retrato.
 
 Por ejemplo, así se ve el tema anime con una sola ventana de uso Pro:
 
@@ -271,16 +290,38 @@ También puedes pasar la dirección como una opción:
 ./start --address "AA:BB:CC:DD:EE:FF"
 ```
 
-## Elegir el perfil de cuenta de Codex
+## Usar varias cuentas de Codex
 
-Las barras de uso corresponden a la cuenta ChatGPT iniciada en el perfil de Codex seleccionado. Si usas perfiles separados para una cuenta principal y otra Personal, selecciona uno con `--codex-home`:
+Si tienes perfiles de Codex o Parall separados con distintas cuentas ChatGPT iniciadas, ejecuta `./start` y elige una cuenta con **↑ / ↓** y **Enter**. Se incluyen el perfil predeterminado de Codex, `CODEX_HOME` y los directorios `.codex` que existan dentro de las carpetas de instancias de Parall en `~/Library/Application Support/Parall/`, incluidas las instancias de Codex y ChatGPT. Son perfiles locales; una instancia puede aparecer aunque su aplicación esté cerrada. Los nombres identifican las carpetas, mientras que `account/read` confirma qué cuenta tiene sesión iniciada. El selector consulta Codex App Server sin leer ni copiar por sí mismo archivos de autenticación.
+
+Por ejemplo, el menú puede mostrar estas cuentas ficticias:
+
+```text
+Codex · cuenta
+  1. Codex · perfil predeterminado · PLAN PRO · PRINCIPAL@EXAMPLE.COM
+› 2. Parall · Codex (Personal) · PLAN PLUS · PERSONAL@EXAMPLE.COM
+```
+
+Antes de mostrar el menú, el inicio consulta los datos de cuenta y pide cuotas actuales a cada perfil ChatGPT detectado. Solo se ofrecen los perfiles que devuelven ventanas de uso correctamente. Las comprobaciones se realizan una por una con tiempos de espera limitados para evitar renovaciones simultáneas de credenciales entre perfiles clonados. Un tiempo de espera agotado o una consulta fallida no se consideran una sesión utilizable; se informa el motivo cuando ningún perfil verificado representa esa cuenta.
+
+Los perfiles con el mismo correo y plan comparten una sola opción en el menú. Un perfil con acceso al uso verificado tiene prioridad sobre un directorio guardado o un nombre de aplicación. Entre los perfiles verificados tiene prioridad el directorio guardado, o `CODEX_HOME` cuando todavía no se guardó ninguno. En caso contrario, la selección automática prioriza una instancia de Codex en Parall, después el perfil predeterminado de CLI, luego un perfil personalizado y finalmente las demás instancias de Parall. Usa `--codex-home` para elegir directamente un directorio concreto.
+
+El correo y el plan identifican los datos locales de la cuenta; una consulta de uso correcta verifica el acceso en el momento de la selección. El inicio vuelve a pedir las cuotas antes de conectar Bluetooth porque las credenciales pueden cambiar mientras eliges bocina o tema. Si un perfil verificado devuelve entonces **401 Unauthorized**, la recuperación prueba los otros perfiles agrupados bajo esa cuenta después de comprobar de nuevo su correo y plan. El perfil que devuelve el uso correctamente pasa a ser la elección guardada. Los inicios con `--codex-home` directo o sin interacción usan exactamente el directorio resuelto y verifican las cuotas al conectar. Si se rechaza la autenticación y ningún intento alternativo funciona, el monitor muestra el directorio afectado y un comando `CODEX_HOME=... codex login`. No inicia sesión automáticamente.
+
+Las consultas de identidad no fuerzan la renovación del token; Codex gestiona la autenticación de las consultas reales de uso. Los perfiles sin sesión, con clave API, con Bedrock, rechazados o no verificados no son seleccionables. Si ningún perfil devuelve cuotas actuales, el inicio se detiene con una explicación. Si no hay correo pero las cuotas se consultan correctamente, el perfil se ofrece sin correo y se mantiene separado porque no se puede comparar su identidad.
+
+El último perfil se preselecciona en los siguientes inicios interactivos después de devolver el uso correctamente. Solo se guarda su ruta en `~/Library/Application Support/divoom-minitoo-codex/account.json`; ese archivo no guarda correos, planes ni credenciales. En un inicio interactivo se preselecciona el perfil guardado, o `CODEX_HOME` si todavía no se guardó ninguno. Cuando se omiten los menús, tiene prioridad `--codex-home`, después `CODEX_HOME`, luego el perfil guardado y finalmente el predeterminado de CLI. Once/preview no modifican esta preferencia. Si se eliminó una ruta guardada, el inicio interactivo permite elegir otra; una ejecución sin interacción informa que el perfil ya no existe.
+
+Las barras de uso corresponden a la cuenta ChatGPT iniciada en el perfil seleccionado. Para elegir directamente una ruta y omitir el selector de cuenta, usa `--codex-home`:
 
 ```sh
 ./start \
   --codex-home "$HOME/Library/Application Support/Parall/ChatGPT (Personal)/.codex"
 ```
 
-Sustituye la ruta por el directorio del perfil que uses. También puedes establecer `CODEX_HOME` en el entorno. Si no indicas ninguno, se usa el perfil predeterminado de CLI. El monitor muestra el uso de una cuenta a la vez; reinícialo después de cambiar el perfil seleccionado. La actividad aún puede reflejar turnos de cualquier perfil instalado y autorizado, porque todos sus hooks comparten el archivo local de actividad. Las sesiones que solo usan una clave API o Bedrock no proporcionan las ventanas de uso de ChatGPT que necesita esta pantalla.
+Sustituye la ruta por el directorio del perfil que uses. El monitor muestra el uso de una cuenta a la vez; reinícialo para seleccionar otro perfil. Por defecto, la actividad corresponde al perfil seleccionado y a los demás perfiles locales agrupados con el mismo correo y plan durante la detección interactiva. Una cuenta distinta en otra instancia de Parall o en la aplicación nativa no activa el indicador de esta cuenta. Los inicios directos o sin interacción siguen únicamente el perfil resuelto. Usa `--activity-scope all` para combinar todos los perfiles locales instalados. Esto no detecta trabajo en otro equipo ni conversaciones normales de ChatGPT que no ejecuten estos hooks de Codex. Las sesiones que solo usan una clave API o Bedrock no proporcionan las ventanas de uso de ChatGPT que necesita esta pantalla.
+
+El monitor revisa la actividad cada segundo. Si falta `Stop`, se recupera cuando terminó el proceso de Codex o de la aplicación registrado, o cuando la transcripción local indicada por el hook contiene una finalización o interrupción de ese mismo turno. Estas comprobaciones no marcan como terminado un turno solo por llevar tiempo sin actividad. La recuperación por transcripción es auxiliar porque su formato no es una interfaz estable de Codex. Si no existe ninguna de esas señales, se conserva el límite de 24 horas como último recurso. `Stop` e `Interrupt` solo borran el turno coincidente; un evento atrasado no borra un turno nuevo, y terminar ya no genera un pulso adicional de ACTIVO.
 
 ## Opciones
 
@@ -318,7 +359,8 @@ Actualiza el uso cada 90 segundos (el mínimo es 10 segundos):
 | `--language en`, `--language es`, `--lang` | Idioma del CLI y la pantalla; tiene prioridad sobre la elección guardada. Primera opción: inglés |
 | `--no-prompt` | Omite los menús; usa idioma/tema/color explícitos o las preferencias guardadas |
 | `--sent compact`, `--sent detailed` | Una línea de estado actualizable (predeterminado) o una línea completa por cada envío; la salida redirigida usa líneas simples |
-| `--codex-home PATH` | Perfil de Codex para consultar el uso; también acepta `CODEX_HOME` |
+| `--codex-home PATH` | Selecciona directamente un perfil de Codex; tiene prioridad sobre el selector y la preferencia guardada |
+| `--activity-scope account\|all` | Sigue los perfiles locales de la cuenta seleccionada (predeterminado) o combina todos los perfiles locales instalados |
 | `--codex-bin PATH` | Ejecutable de Codex CLI; también acepta `CODEX_BIN` |
 | `--interval SECONDS` | Intervalo entre consultas de uso; predeterminado: `60`, mínimo: `10` |
 | `--encoding rgb`, `--encoding jpeg` | Codificación MiniToo; RGB888/Zstandard sin pérdida por defecto. JPEG sigue disponible explícitamente. TimeBox Mini siempre usa RGB444. |
@@ -338,15 +380,17 @@ Los temas MiniToo envían cuadros completos para sus animaciones, en **RGB888/Zs
 
 ## Solución de problemas
 
-- **No se detecta la bocina:** Enciéndela, activa Bluetooth y empareja la bocina en los ajustes Bluetooth de macOS. Autoriza el acceso Bluetooth de Terminal si macOS lo solicita. La detección reconoce los nombres de los modelos compatibles; si cambiaste el nombre, puedes usar la dirección manual en el menú. Ejecuta otra vez `./scripts/install.sh` si falta el detector. Otros modelos Divoom no se seleccionan automáticamente.
+- **No se detecta la bocina:** Enciéndela, activa Bluetooth y empareja la bocina en los ajustes Bluetooth de macOS. Autoriza el acceso Bluetooth de Terminal si macOS lo solicita. La detección reconoce los nombres de los modelos compatibles; si cambiaste el nombre, puedes usar la dirección manual en el menú. Ejecuta otra vez `./install` si falta el detector. Otros modelos Divoom no se seleccionan automáticamente.
 - **Tablero de ajedrez o manchas en detalles finos del MiniToo:** En una [comparación física JPEG frente a RGB](docs/MINITOO_CODEC_COMPARISON.md), RGB sin pérdida eliminó el defecto en la imagen de prueba de 128 × 128. Usa la [prueba RGB nativa](docs/MINITOO_RGB.md) para el dashboard completo y las animaciones; si se muestran correctamente, selecciona `--encoding rgb`. La [comparación de calidad JPEG](docs/JPEG_QUALITY_COMPARISON.md) sigue disponible para diagnóstico.
 - **No aparecen las barras de uso:** Inicia sesión en un perfil de ChatGPT con uso de Codex. Si utilizas otro perfil, pasa su ruta con `--codex-home`.
-- **El puente no devuelve datos o la respuesta no es válida:** Ejecuta otra vez `./scripts/install.sh` para recompilar los puentes, confirma que el dispositivo esté enlazado y revisa su dirección MAC. Para TimeBox Mini, cierra la aplicación Divoom al conectar.
+- **401 Unauthorized / no se pudo interpretar el token de autenticación:** Se rechazó la credencial usada para consultar las cuotas de la cuenta. El inicio interactivo omite las cuentas cuyos perfiles no pasan la consulta de uso actual. Las credenciales todavía pueden vencer o cambiar después de esa comprobación. Reinicia `./start` para verificar los perfiles de nuevo; el inicio puede recuperarse con un perfil coincidente si la autenticación cambia después de seleccionarlo. Si todos fallan, ejecuta el comando de inicio de sesión que se muestra para el directorio afectado y reinicia el monitor. Cada perfil de Parall tiene su propio estado de sesión; iniciar sesión en el perfil predeterminado de CLI puede no reparar el perfil seleccionado. Consulta la [documentación de autenticación de Codex App Server](https://learn.chatgpt.com/docs/app-server#auth-endpoints).
+- **El puente no devuelve datos o la respuesta no es válida:** Ejecuta otra vez `./install` para recompilar los puentes, confirma que el dispositivo esté enlazado y revisa su dirección MAC. Para TimeBox Mini, cierra la aplicación Divoom al conectar.
 - **Se perdió la conexión, se detuvo el puente o no se confirmó una transferencia:** El monitor cierra el puente fallido e intenta una vez con una sesión Bluetooth nueva. Si ambos intentos fallan, el monitor continuo sigue ejecutándose e intenta de nuevo con pausas de 5, 10, 20, 40 y hasta 60 segundos. No marca como completada una transferencia fallida. `--once` termina con un error si los dos intentos fallan. Los mensajes muestran la etapa de conexión, el código de salida del puente cuando está disponible y sus logs recientes.
 - **MiniToo se queda en la pantalla de carga:** El puente procesa pedidos de bloques durante la transferencia, valida las sumas de comprobación de los paquetes y reconoce la [confirmación final capturada](https://github.com/alvinunreal/divoom-minitoo-osx/blob/main/PROTOCOL.md#final-ack) en vez de tomar cualquier respuesta como confirmación. Exige que MiniToo solicite los datos en los primeros 5 segundos; si no responde, no envía imágenes y reconecta. Espera hasta 10 segundos por un bloque solicitado, limita la transferencia Bluetooth a 40 segundos y espera hasta 60 segundos la respuesta local. La recuperación ocurre en cualquier pantalla. Si el dispositivo ya quedó bloqueado por una transferencia anterior incompleta, detén el monitor, cierra la aplicación Divoom y la conexión de audio Bluetooth de MiniToo, apaga y enciende MiniToo, y reinicia el monitor. Si falta la confirmación, la transferencia no está confirmada; eso no demuestra por sí solo que no se haya actualizado la pantalla.
 - **Diagnóstico de un bloqueo recurrente:** Cada monitor guarda logs con fecha y hora, errores y salida del puente, incluidos los bytes de control Bluetooth recibidos. El log predeterminado de MiniToo es `~/Library/Logs/divoom-minitoo-codex/minitoo-40584.log`; TimeBox Mini usa `~/Library/Logs/divoom-minitoo-codex/timebox-mini-40585.log`. La ruta completa se muestra al iniciar. Puedes elegir otra con `--log-file /ruta/al/monitor.log`. Al reportar un bloqueo, incluye la sección del log correspondiente: permite distinguir si el dispositivo no responde o si llegó una respuesta que el puente no reconoce. Los logs pueden incluir direcciones de conexión y porcentajes de uso mostrados; no contienen prompts, tokens de acceso ni imágenes.
 - **El puerto local ya está en uso:** Detén el otro monitor del mismo modelo. El monitor espera el aviso de disponibilidad de su propio puente; otro proceso que escucha ese puerto no se considera una conexión correcta. MiniToo y TimeBox Mini pueden funcionar a la vez porque usan distintos puertos predeterminados (`40584` y `40585`).
-- **La pantalla no muestra ACTIVO / WORK:** Mantén el monitor en ejecución, revisa y autoriza los hooks de Divoom con `/hooks` en el mismo perfil que recibió el prompt y reinicia ese perfil. El hook no responde en la conversación de Codex; actualiza `~/.codex/divoom-minitoo-codex-activity.json` para que lo lea el monitor.
+- **La pantalla no muestra ACTIVO / WORK:** Ejecuta `.venv/bin/python scripts/install_activity_hooks.py status --all-profiles`. Si falta configuración, ejecuta el mismo comando con `install` en lugar de `status`; incluye las instancias de Codex y ChatGPT de Parall. Mantén el monitor en ejecución, revisa y autoriza los hooks de Divoom con `/hooks` en el mismo perfil que recibió el prompt y reinicia ese perfil. El hook no responde en la conversación de Codex; actualiza `~/.codex/divoom-minitoo-codex-activity.json` para que lo lea el monitor.
+- **ACTIVO permanece visible o viene de otra cuenta:** Reinicia con el valor predeterminado `--activity-scope account`, actualiza los hooks con `install --all-profiles`, autoriza sus nuevas definiciones y reinicia las instancias afectadas de Codex. La instalación descarta los registros antiguos sin perfil de origen. Cuando existe la evidencia correspondiente, las comprobaciones de proceso terminado y finalización del mismo turno recuperan eventos de cierre ausentes; por defecto el monitor no suma la actividad de otra cuenta.
 - **macOS deniega el acceso a Bluetooth:** Autoriza Bluetooth para el proceso que ejecuta el puente en Configuración del Sistema de macOS.
 - **Aparece un reloj de arena durante una actualización MiniToo:** MiniToo puede mostrar su propia pantalla de transferencia/carga al recibir imágenes modificadas. El monitor evita enviar imágenes idénticas, pero un cambio visible puede activar esa pantalla.
 
@@ -372,7 +416,7 @@ Los demás hooks de esos perfiles se conservan. Este comando no elimina el entor
 
 ## Privacidad y mantenimiento de la galería
 
-El monitor no lee ni guarda tokens de acceso. Los hooks de actividad guardan identificadores de sesión y de turno con sus fechas y horas; no guardan prompts, respuestas ni resultados de herramientas. Los datos de uso y el correo se consultan localmente mediante Codex App Server y se representan en las imágenes de MiniToo. El generador de la galería solo usa valores de ejemplo y un correo ficticio; no consulta tu cuenta.
+El monitor no lee ni guarda tokens de acceso. Los hooks de actividad guardan rutas de perfiles locales, identificadores de sesión y turno, marcas de tiempo, un identificador del proceso propietario cuando está disponible y una ruta opcional de transcripción local; no guardan prompts, respuestas ni salida de herramientas. Si falta un hook de cierre, el monitor puede leer hasta 256 KiB del final de esa transcripción y conservar únicamente identificadores y marcas de tiempo de eventos de finalización. El contenido de la transcripción no se escribe en logs, no se guarda ni se sube. Los datos de uso y el correo se consultan localmente mediante Codex App Server y se representan en las imágenes de MiniToo. El generador de la galería solo usa valores de ejemplo y un correo ficticio; no consulta tu cuenta.
 
 Después de cambiar un renderizador, regenera las imágenes de ejemplo del README con:
 

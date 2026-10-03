@@ -45,7 +45,7 @@ def discover_devices(language: str = "en") -> list[DivoomDevice]:
         raise DiscoveryError(tr("Automatic Bluetooth detection requires macOS.", language))
     helper = Path(__file__).resolve().parents[2] / "build" / "divoom-devices"
     if not helper.is_file():
-        raise DiscoveryError(tr("Bluetooth detection helper is missing. Run ./scripts/install.sh once, or provide --address.", language))
+        raise DiscoveryError(tr("Bluetooth detection helper is missing. Run ./install once, or provide --address.", language))
     try:
         result = subprocess.run([str(helper)], capture_output=True, text=True, timeout=12)
     except (OSError, subprocess.TimeoutExpired) as exc:

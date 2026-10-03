@@ -46,7 +46,7 @@ def compress_rgb(rgb: bytes) -> bytes:
         # upgrading. New installs receive the Python dependency automatically.
         executable = shutil.which("zstd")
         if executable is None:
-            raise MiniTooError("RGB encoding requires zstandard. Run scripts/install.sh to update the installation.") from error
+            raise MiniTooError("RGB encoding requires zstandard. Run ./install to update the installation.") from error
         try:
             result = subprocess.run(
                 [executable, "-q", "-c", "--single-thread", f"-{COMPRESSION_LEVEL}",

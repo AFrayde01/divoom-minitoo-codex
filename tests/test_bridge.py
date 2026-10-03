@@ -190,7 +190,7 @@ class MonitorRecoveryTests(unittest.TestCase):
         def sleep(seconds):
             clock[0] += seconds
 
-        def read_activity(_):
+        def read_activity(_, **kwargs):
             if clock[0] >= 12:
                 raise KeyboardInterrupt
             return activity
