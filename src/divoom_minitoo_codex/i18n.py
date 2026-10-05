@@ -173,6 +173,8 @@ _ERROR_FRAGMENTS = {
     "Bluetooth bridge not found at {path}. Run ./install first.": "No se encontró el puente Bluetooth en {path}. Ejecuta ./install primero.",
     "Could not start the {device} bridge: ": "No se pudo iniciar el puente de {device}: ",
     "{device} bridge stopped while connecting. Check the Bluetooth address, pairing, and macOS Bluetooth permission.": "El puente de {device} se detuvo al conectar. Revisa la dirección Bluetooth, el emparejamiento y el permiso Bluetooth de macOS.",
+    "{device} bridge stopped while connecting.": "Se detuvo el puente de {device} al conectar.",
+    " Stop the monitor with Ctrl+C, then restart it with ./start. If the same channel error returns, close the Divoom app and any other Divoom monitor, turn the TimeBox Mini off for 10 seconds, turn it back on, then restart ./start.": " Detén el monitor con Ctrl+C y vuelve a iniciarlo con ./start. Si continúa el mismo error del canal, cierra la app Divoom y cualquier otro monitor Divoom, apaga TimeBox Mini durante 10 segundos, vuelve a encenderlo y reinicia ./start.",
     "The {device} bridge is outdated and does not authenticate local requests. Rebuild it with ./install, then restart the monitor.": "El puente de {device} está desactualizado y no autentica solicitudes locales. Recompílalo con ./install y reinicia el monitor.",
     "{device} bridge did not start listening on localhost:{port} within 15 seconds.": "El puente de {device} no empezó a escuchar en localhost:{port} en 15 segundos.",
     " Rebuild the authenticated bridges with ./install if upgrading.": " Si estás actualizando, recompila los puentes autenticados con ./install.",

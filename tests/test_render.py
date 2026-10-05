@@ -6,7 +6,7 @@ from PIL import Image, ImageChops
 
 from divoom_minitoo_codex.activity import CodexActivity
 from divoom_minitoo_codex.appserver import ResetCredit, ResetCredits, UsageSnapshot, UsageWindow
-from divoom_minitoo_codex.render import ANIME_PALETTES, THEMES, render_reset_credits, render_usage, render_usage_frames
+from divoom_minitoo_codex.render import ANIME_PALETTES, PORTRAIT_THEMES, THEMES, render_reset_credits, render_usage, render_usage_frames
 
 
 class DisplayTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class DisplayTests(unittest.TestCase):
         for theme in ("anime", "anime-pixel", "anime-pixel-chibi"):
             boxes = {
                 "anime": ((9, 33, 27, 49), (38, 27, 63, 44)),
-            "anime-pixel": ((25, 36, 46, 48), (55, 39, 72, 53), (40, 60, 56, 67)),
+            "anime-pixel": ((25, 31, 47, 44), (52, 38, 69, 51)),
             "anime-pixel-chibi": ((20, 38, 42, 55), (54, 35, 71, 53), (41, 61, 56, 69)),
             }[theme]
             for color in ANIME_PALETTES:
@@ -51,6 +51,24 @@ class DisplayTests(unittest.TestCase):
         self.assertIsNotNone(diff.getbbox())
         diff.paste((0, 0, 0), (8, 30, 86, 108))
         self.assertIsNone(diff.getbbox())
+
+    def test_plus_plan_two_window_bars_use_the_selected_palette_family(self):
+        plus_snapshot = UsageSnapshot(
+            plan_type="plus",
+            windows=(
+                UsageWindow("5H", 38, 300, int(self.now.timestamp()) + 7200),
+                UsageWindow("7D", 21, 10_080, int(self.now.timestamp()) + 4 * 86_400),
+            ),
+        )
+        for theme in PORTRAIT_THEMES:
+            for color, palette in ANIME_PALETTES.items():
+                with self.subTest(theme=theme, color=color):
+                    image = render_usage(
+                        plus_snapshot, self.now, self.activity, theme=theme, anime_color=color,
+                    )
+                    self.assertEqual(image.getpixel((120, 90)), palette.secondary)
+        self.assertGreater(ANIME_PALETTES["green"].secondary[1], ANIME_PALETTES["green"].secondary[2] + 30)
+        self.assertGreater(ANIME_PALETTES["blue"].secondary[2], ANIME_PALETTES["blue"].secondary[1] + 50)
 
     def test_header_subtitles_have_at_least_three_blank_rows_below_codex(self):
         for theme in THEMES:

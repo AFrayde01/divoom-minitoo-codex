@@ -1,22 +1,22 @@
 # Anime pixel artwork provenance
 
-There are three pixel portrait themes: **`anime-pixel`**, an adult woman around 24 drawn in the chibi's simple retro style; **`anime-pixel-chibi`**, the compact, large-eyed character; and **`anime-pixel-detail`**, the preserved detailed adult portrait. All share the dashboard, blink animation and four colors. The initial CLI theme is `neon`; later starts restore per-device preferences.
+There are three pixel portrait themes: **`anime-pixel`**, the adult three-quarter portrait with a defined eyelash blink and RGB color; **`anime-pixel-chibi`**, the compact, large-eyed character; and **`anime-pixel-detail`**, the preserved original adult portrait. All share the dashboard, blink animation and four colors. The initial CLI theme is `neon`; later starts restore per-device preferences.
 
-The adult portrait was generated from text only on **2026-10-01**, without an external image, named character, artist or franchise reference. The original adult and its matching blink were restored for RGB comparison on 2026-10-02 and are now preserved as [anime-pixel-detail](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md). The new [simple adult sprite](ANIME_PIXEL_ADULT_RETRO.md) uses only that original adult and this project's own chibi as drawing-style inputs. The simple adult and chibi now have [gentle open-eye smiles and broader closed-eye smiles](ANIME_PIXEL_SMILES.md), and use an artistic palette of up to 16 colors. The detail variant keeps RGB tones without a global color-count limit. Fixed eye-socket and mouth regions keep remaining pixels identical across a blink; detail changes only its eye sockets. Earlier cleanup and close-up drafts remain available for provenance.
+The original adult portrait was generated from text only on **2026-10-01**, without an external image, named character, artist or franchise reference. It is preserved as [anime-pixel-detail](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md). The normal `anime-pixel` theme uses the previously created [simplified adult sprite and matching eyelash blink](artwork/anime-pixel-adult-simple-open-source.png). Its blink changes only the eyes; the mouth, cheeks, hair and background remain fixed. It keeps RGB tones without a global color-count limit. The chibi retains the separate 16-color retro sprite and its smile during the blink. Earlier adult revisions remain available for provenance.
 
 | Adult source / asset | Purpose |
 | --- | --- |
 | [artwork/anime-pixel-adult-open-source.png](artwork/anime-pixel-adult-open-source.png) | Active anime-pixel-detail source, originally generated from text only |
 | [artwork/anime-pixel-adult-blink-source.png](artwork/anime-pixel-adult-blink-source.png) | Active anime-pixel-detail blink; only the eye sockets enter the runtime frame |
-| [artwork/anime-pixel-adult-smile-open-source.png](artwork/anime-pixel-adult-smile-open-source.png) | Active simple adult with a gentle smile and discreet nose |
-| [artwork/anime-pixel-adult-smile-blink-source.png](artwork/anime-pixel-adult-smile-blink-source.png) | Active simple-adult closed-eye smile |
+| [artwork/anime-pixel-adult-simple-open-source.png](artwork/anime-pixel-adult-simple-open-source.png) | Active normal adult portrait |
+| [artwork/anime-pixel-adult-simple-blink-source.png](artwork/anime-pixel-adult-simple-blink-source.png) | Matching blink with defined lashes; only the two eye sockets change |
+| [artwork/anime-pixel-adult-smile-open-source.png](artwork/anime-pixel-adult-smile-open-source.png) | Previous simple adult with a discreet nose |
+| [artwork/anime-pixel-adult-smile-blink-source.png](artwork/anime-pixel-adult-smile-blink-source.png) | Previous blink that also widened the smile |
 | [artwork/anime-pixel-adult-retro-open-source.png](artwork/anime-pixel-adult-retro-open-source.png) | Previous simple adult with the chibi drawing style |
 | [artwork/anime-pixel-adult-retro-blink-source.png](artwork/anime-pixel-adult-retro-blink-source.png) | Previous matching simple-adult blink |
 | [artwork/anime-pixel-adult-retro-expression-open-source.png](artwork/anime-pixel-adult-retro-expression-open-source.png) | Intermediate discreet-nose draft used as the smile edit input |
 | [../src/divoom_minitoo_codex/assets/anime_pixel_detail_portrait.png](../src/divoom_minitoo_codex/assets/anime_pixel_detail_portrait.png) | Preserved detailed adult open-eye asset |
 | [../src/divoom_minitoo_codex/assets/anime_pixel_detail_portrait_blink.png](../src/divoom_minitoo_codex/assets/anime_pixel_detail_portrait_blink.png) | Preserved detailed adult blink asset |
-| [artwork/anime-pixel-adult-simple-open-source.png](artwork/anime-pixel-adult-simple-open-source.png) | Simplified hair draft |
-| [artwork/anime-pixel-adult-simple-blink-source.png](artwork/anime-pixel-adult-simple-blink-source.png) | Matching blink for the hair draft |
 | [artwork/anime-pixel-adult-clean-open-source.png](artwork/anime-pixel-adult-clean-open-source.png) | Hair and eye refinement draft |
 | [artwork/anime-pixel-adult-clean-blink-source.png](artwork/anime-pixel-adult-clean-blink-source.png) | Matching blink for the hair and eye draft |
 | [artwork/anime-pixel-adult-flat-open-source.png](artwork/anime-pixel-adult-flat-open-source.png) | Previous cleanup source, retained for provenance |
@@ -25,8 +25,8 @@ The adult portrait was generated from text only on **2026-10-01**, without an ex
 | [artwork/anime-pixel-adult-solid-blink-source.png](artwork/anime-pixel-adult-solid-blink-source.png) | Previous general cleanup blink |
 | [artwork/anime-pixel-adult-hair-open-source.png](artwork/anime-pixel-adult-hair-open-source.png) | Previous adult source with a more coherent bob, retained for provenance |
 | [artwork/anime-pixel-adult-hair-blink-source.png](artwork/anime-pixel-adult-hair-blink-source.png) | Previous matching blink with thinner eyelids, retained for provenance |
-| [artwork/anime-pixel-adult-closeup-open-source.png](artwork/anime-pixel-adult-closeup-open-source.png) | Previous adult face close-up, retained for comparison |
-| [artwork/anime-pixel-adult-closeup-blink-source.png](artwork/anime-pixel-adult-closeup-blink-source.png) | Previous close-up blink, retained for comparison |
+| [artwork/anime-pixel-adult-closeup-open-source.png](artwork/anime-pixel-adult-closeup-open-source.png) | Previous close-up revision, retained for comparison |
+| [artwork/anime-pixel-adult-closeup-blink-source.png](artwork/anime-pixel-adult-closeup-blink-source.png) | Previous matching blink with thinner eyelids |
 | [artwork/anime-pixel-adult-face-open-source.png](artwork/anime-pixel-adult-face-open-source.png) | Reverted eye and forehead experiment, retained for provenance |
 | [artwork/anime-pixel-adult-face-blink-source.png](artwork/anime-pixel-adult-face-blink-source.png) | Reverted eye and forehead blink experiment, retained for provenance |
 | [../src/divoom_minitoo_codex/assets/anime_pixel_portrait.png](../src/divoom_minitoo_codex/assets/anime_pixel_portrait.png) | Adult open-eye frame |
@@ -87,9 +87,9 @@ Regenerate all portrait variants and their README previews with:
 .venv/bin/python scripts/generate_theme_gallery.py
 ```
 
-The current pixel exports use `anime-pixel-adult-smile` for the simple adult, `anime-pixel-chibi-smile` for chibi, and the original `anime-pixel-adult` pair for detail. All occupy the full **78 × 78 portrait region** and are saved as RGB PNG frames. The adult variants use the [native cell sampling method](ANIME_PIXEL_ADULT_CLOSEUP.md#rgb-export). The simple adult then receives the same shared artistic palette of up to 16 colors as the chibi; detail keeps the sampled RGB tones without a global palette cap. Chibi retains its nearest-neighbor sampling. All exports avoid dithering. [Smile export notes](ANIME_PIXEL_SMILES.md) record the active source pairs and eye/mouth coordinates; [detailed adult notes](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md) record the preserved source pair. Palette reduction is a style choice, not a TFT or transmission limit.
+The current pixel exports use `anime-pixel-adult-simple` for the normal adult, `anime-pixel-chibi-smile` for chibi, and `anime-pixel-adult` for detail. All occupy the full **78 × 78 portrait region** and are saved as RGB PNG frames. The adult variants use the [native cell sampling method](ANIME_PIXEL_ADULT_CLOSEUP.md#rgb-export); only chibi uses the 16-color retro palette. All exports avoid dithering. [Smile export notes](ANIME_PIXEL_SMILES.md) preserve the earlier expression experiment; [detailed adult notes](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md) record the detail source pair.
 
-The simple adult and chibi blink exports retain the open-eye frame outside two eye sockets and one mouth region. Only the eyes and smile change; the cheeks, hair and background remain identical. The detailed adult changes only the eye sockets. At runtime the renderer switches between complete portrait images.
+The normal adult and detail blink exports retain the open-eye frame outside their two eye sockets. The normal adult's smile, cheeks, hair and background do not change. Chibi keeps its broader smile in the closed-eye frame. At runtime the renderer switches between complete portrait images.
 
 The layout shares the anime quota and refill calculations, the single-window vertical meter and the reset-credit screen. Its font uses the existing bitmap glyphs, and its cards have square corners. The WORKING badge uses the same animated bars.
 
