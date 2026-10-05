@@ -117,9 +117,18 @@ class MiniTooBridge:
                     self._stderr_thread.join(timeout=1)
                 diagnostics = self._bridge_diagnostics()
                 self.close()
+                timebox_channel_open_failed = (
+                    self.display_name == "TimeBox Mini"
+                    and "Could not open TimeBox Mini RFCOMM channel 4" in diagnostics
+                )
+                connection_hint = (
+                    ""
+                    if timebox_channel_open_failed
+                    else " Check the Bluetooth address, pairing, and macOS Bluetooth permission."
+                )
                 raise MiniTooError(
-                    f"{self.display_name} bridge stopped while connecting. Check the Bluetooth address, "
-                    "pairing, and macOS Bluetooth permission."
+                    f"{self.display_name} bridge stopped while connecting."
+                    + connection_hint
                     + (f" Details: {diagnostics}." if diagnostics else "")
                 )
             # A connect-only probe can accidentally find another monitor on
@@ -243,8 +252,20 @@ class MiniTooBridge:
                 if self.logger is not None:
                     self.logger.warning("Transfer attempt %s/2 failed: %s", attempt + 1, exc)
         self.close()
+        timebox_channel_open_failed = (
+            self.display_name == "TimeBox Mini"
+            and any("Could not open TimeBox Mini RFCOMM channel 4" in failure for failure in failures)
+        )
+        recovery_hint = (
+            " Stop the monitor with Ctrl+C, then restart it with ./start. "
+            "If the same channel error returns, close the Divoom app and any other Divoom monitor, "
+            "turn the TimeBox Mini off for 10 seconds, turn it back on, then restart ./start."
+            if timebox_channel_open_failed
+            else ""
+        )
         raise MiniTooError(
             f"{self.display_name} transfer failed after one reconnect. "
+            + recovery_hint
             + " Initial attempt: " + failures[0]
             + " Reconnect attempt: " + failures[1]
         )

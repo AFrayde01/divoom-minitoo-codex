@@ -1,29 +1,28 @@
 # Adult sprite in the chibi drawing style
 
-Created on **2026-10-02** with the **built-in OpenAI image generation tool**. Every image input was this project's own generated artwork: the original adult portrait, the chibi portrait, and intermediate drafts derived from them. No external illustration, named artist, character or franchise reference was supplied.
+Created on **2026-10-02** with the **built-in OpenAI image generation tool**. Every image input was this project's own generated artwork: the original adult portrait, the chibi portrait, and intermediate drafts derived from them. No external illustration, named artist, character or franchise reference was supplied. This retro-style adult is retained for provenance; the normal `anime-pixel` theme now uses the previously created adult-simple RGB portrait and its matching eyelash blink.
 
 ## Themes and active sources
 
-- **`anime-pixel`**: a woman around 24 with adult proportions, smaller almond eyes, a longer midface and a gentle closed smile, drawn with the chibi's connected hair clusters, stepped outlines and compact facial features. The smile grows during the closed-eye frame.
+- **Previous `anime-pixel` design**: a woman around 24 with adult proportions, smaller almond eyes, a longer midface and a gentle closed smile, drawn with the chibi's connected hair clusters, stepped outlines and compact facial features. The smile grows during the closed-eye frame.
 - **`anime-pixel-detail`**: preserves the preceding original adult portrait and matching blink with all sampled RGB tones. [Detail sources and notes](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md).
 - **`anime-pixel-chibi`**: retains the existing compact character with larger eyes, now with the same gentle-smile / broader-closed-eye-smile behavior.
 
 The three share the same dashboard, five-frame blink/WORKING cadence, quota and refill bars, reset-credit screen, and `purple`, `red`, `blue` and `green` options.
 
-Selected files:
+Historical source files:
 
 - [Open-eye smile source](artwork/anime-pixel-adult-smile-open-source.png)
 - [Matching closed-eye smile source](artwork/anime-pixel-adult-smile-blink-source.png)
-- [Native open-eye asset](../src/divoom_minitoo_codex/assets/anime_pixel_portrait.png)
-- [Native blink asset](../src/divoom_minitoo_codex/assets/anime_pixel_portrait_blink.png)
+- [Current normal adult sources and runtime frames](ANIME_PIXEL_ADULT_CLOSEUP.md)
 
 ## Native export
 
-Run `python scripts/prepare_anime_artwork.py`. The source prefix is `anime-pixel-adult-smile`. The eye regions are `((25, 36, 46, 48), (55, 39, 72, 53))` and the mouth region is `(40, 60, 56, 67)`. The [smile-generation prompts](ANIME_PIXEL_SMILES.md) record the current expression edits; the prompts below document the earlier drawing-style revision.
+The historical source prefix is `anime-pixel-adult-smile`. Its eye regions were `((25, 36, 46, 48), (55, 39, 72, 53))` and its mouth region was `(40, 60, 56, 67)`. The [smile-generation prompts](ANIME_PIXEL_SMILES.md) retain the expression-edit record; the prompts below document the earlier drawing-style revision.
 
-The simple adult uses the existing 78 × 78 cell sampling method followed by the same shared warm/violet artistic palette used by chibi, with at most 16 colors and no dithering. This palette is a drawing-style choice, not a limitation of MiniToo's TFT or RGB888 transmission. The detailed adult continues to use the original source pair and RGB sampling without this palette reduction.
+At the time this sprite was active, it used the existing 78 × 78 cell sampling method followed by the same shared warm/violet artistic palette used by chibi, with at most 16 colors and no dithering. The normal adult-simple sprite now keeps full RGB tones, as does the detailed adult.
 
-Only the blink's fixed eye and mouth regions enter the final closed-eye frame. Every pixel outside those regions comes from the open-eye frame, preserving hair, cheeks and background. Recoloring changes violet tones while retaining warm skin and cheeks.
+The historical smile blink changed both eye and mouth regions. The normal adult-simple sprite now uses its existing matching blink source: only the eyes change while its mouth, hair, cheeks and background remain unchanged. Recoloring changes violet tones while retaining warm skin and cheeks.
 
 Use lossless RGB for the MiniToo comparison:
 

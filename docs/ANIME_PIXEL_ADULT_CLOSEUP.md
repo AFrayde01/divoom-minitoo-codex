@@ -2,7 +2,7 @@
 
 The adult `anime-pixel` portrait was reframed on **2026-10-02** using the **built-in OpenAI image generation tool**. Inputs were only this project's own generated portrait and the matching blink draft. No external illustration, named artist, character or franchise reference was used.
 
-**Historical revision:** the runtime now uses the [restored original portrait](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md). The sources, eye regions and measurements below describe this preceding close-up.
+This is a previous close-up revision, retained for comparison. The normal `anime-pixel` theme uses the existing [adult-simple pair](ANIME_PIXEL_ARTWORK.md#sources-and-runtime-assets), whose blink has the defined eyelashes in the selected reference. The separate [anime-pixel-detail portrait](ANIME_PIXEL_ADULT_ORIGINAL_RGB.md) keeps the more detailed original.
 
 ## Close-up sources and shared runtime asset paths
 
@@ -17,11 +17,11 @@ The edit brings the face closer by cropping the crown and outer bob, while prese
 
 Run `python scripts/prepare_anime_artwork.py`. At this revision, the adult's source prefix was `anime-pixel-adult-closeup`, with native eye regions `((22, 27, 45, 41), (54, 36, 75, 49))`.
 
-The previous adult exporter deliberately reduced the portrait to at most 16 colors. That was an artistic/software choice, **not a demonstrated hardware limit**. The current adult exporter keeps RGB tones without an indexed palette or global color-count limit. The chibi retains its existing 16-color retro treatment.
+This previous close-up exporter kept RGB tones without an indexed palette or global color-count limit. The current normal adult uses the existing adult-simple source pair.
 
 For each native pixel, the exporter samples an 8 × 8 cell. Nearby samples are grouped locally in 16-wide RGB channel buckets, keeping violet tones separate from warm tones. The output takes the weighted mean of the most frequent group; equal-area ties prefer the center sample's group. These buckets identify the dominant local tone, rather than force pixels to a fixed palette: different cells can retain different RGB values. Competing edge colors are excluded, so the final grid keeps its deliberate steps without dithering or blending hair and skin together. Within the closed-eye sockets, dark source strokes covering at least one quarter of a cell are retained to keep thin eyelids connected.
 
-The blink source contributes only within the eye regions. All remaining pixels come from the open-eye source. Purple, red, blue and green recoloring continues to preserve warm skin and cheek colors.
+The blink source contributes only within the eye regions. All remaining pixels, including the mouth, come from the open-eye source. Purple, red, blue and green recoloring continues to preserve warm skin and cheek colors.
 
 Local render inspection found 746 distinct colors in the purple open-eye portrait, and 694–699 in the recolored portraits. Pixels outside the eye regions remain identical across a blink for all four variants. These counts describe the runtime PNG artwork, not the TFT's hardware color depth. The actual JPEG encoder remains at quality 98 with 4:4:4 sampling. The five illustrative display frames totaled about 109–112 KB; physical device appearance and transfer duration have not been checked for this revision.
 
@@ -65,4 +65,3 @@ Change ONLY the dark closed eyelid shapes. They are still much too thick and loo
 Preserve ALL OTHER PIXELS/FEATURES: close-up face framing, the same adult 24-year-old face, pose and proportions, entire hair silhouette and highlights, eyebrows, forehead, nose, tiny closed smile, both cheek patches, skin colors, ear, chin crop and background. No redraw, recolor, movement or added details outside the two eyelid regions. Same nuanced RGB tones and deliberate 78 x 78 logical pixel-art clusters, no palette cap, dithering, noise, grain, blur, text, accessories, UI, frames or watermark.
 Return one matching complete CLOSED-EYE portrait with only thinner eyelids and removal of their extra creases.
 ```
-

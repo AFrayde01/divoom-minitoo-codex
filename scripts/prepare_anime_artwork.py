@@ -22,9 +22,9 @@ EYE_REGIONS = ((9, 33, 27, 49), (38, 27, 63, 44))
 CHIBI_EYE_REGIONS = ((20, 38, 42, 55), (54, 35, 71, 53))
 # Preserve the detailed portrait's original eye positions independently.
 DETAIL_EYE_REGIONS = ((25, 31, 47, 44), (52, 38, 69, 51))
-ADULT_EYE_REGIONS = ((25, 36, 46, 48), (55, 39, 72, 53))
-# The simple adult and chibi smile more during their closed-eye frame.
-ADULT_MOUTH_REGIONS = ((40, 60, 56, 67),)
+# Previously created adult portrait/blink pair selected for the normal theme.
+NORMAL_ADULT_EYE_REGIONS = ((25, 31, 47, 44), (52, 38, 69, 51))
+# Chibi retains its slightly broader smile in the closed-eye frame.
 CHIBI_MOUTH_REGIONS = ((41, 61, 56, 69),)
 
 
@@ -221,9 +221,8 @@ def main() -> None:
                     mouth_regions=CHIBI_MOUTH_REGIONS)
     export_portrait("anime-pixel-adult", "anime_pixel_detail_portrait", pixel_art=True,
                     eye_regions=DETAIL_EYE_REGIONS, native_grid=True)
-    export_portrait("anime-pixel-adult-smile", "anime_pixel_portrait", pixel_art=True,
-                    eye_regions=ADULT_EYE_REGIONS, native_grid=True, retro_palette=True,
-                    mouth_regions=ADULT_MOUTH_REGIONS)
+    export_portrait("anime-pixel-adult-simple", "anime_pixel_portrait", pixel_art=True,
+                    eye_regions=NORMAL_ADULT_EYE_REGIONS, native_grid=True)
 
 
 if __name__ == "__main__":

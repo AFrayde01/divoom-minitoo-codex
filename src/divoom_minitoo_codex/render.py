@@ -93,7 +93,7 @@ ANIME_PALETTES = {
     "blue": AnimePalette(
         hue_shift=221, paper=(9, 14, 28), dark=(4, 6, 17), light=(58, 78, 139),
         frame=(34, 48, 104), frame_light=(132, 152, 232), primary=(87, 149, 255),
-        secondary=(146, 129, 238), badge=(20, 29, 57), badge_edge=(76, 100, 185),
+        secondary=(104, 139, 225), badge=(20, 29, 57), badge_edge=(76, 100, 185),
         idle=(149, 165, 249), working=(88, 159, 255), setup=(246, 201, 123),
         card=(17, 23, 44), card_edge=(52, 67, 127), ink=(236, 241, 255),
         muted=(161, 175, 218), bar_bg=(41, 52, 87), footer=(163, 178, 224),
@@ -101,7 +101,7 @@ ANIME_PALETTES = {
     "green": AnimePalette(
         hue_shift=151, paper=(10, 21, 18), dark=(4, 10, 9), light=(62, 116, 91),
         frame=(28, 81, 59), frame_light=(133, 210, 162), primary=(69, 206, 136),
-        secondary=(68, 177, 170), badge=(19, 40, 30), badge_edge=(64, 135, 99),
+        secondary=(74, 182, 119), badge=(19, 40, 30), badge_edge=(64, 135, 99),
         idle=(133, 221, 163), working=(71, 225, 138), setup=(246, 201, 123),
         card=(17, 35, 25), card_edge=(47, 102, 71), ink=(236, 251, 238),
         muted=(160, 201, 170), bar_bg=(37, 72, 50), footer=(166, 208, 175),

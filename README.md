@@ -163,7 +163,7 @@ The anime portrait was created for this project from a written character brief, 
 
 ### Anime pixel art
 
-Select **anime-pixel** for an adult woman around 24, drawn in the same simple retro sprite style as the chibi: broad connected hair shapes, clean pixel contours, a compact nose and a short closed smile. Adult proportions and smaller almond eyes distinguish her from the chibi. The [adult sprite brief and sources](docs/ANIME_PIXEL_ADULT_RETRO.md) document this revision. Both use a shared artistic palette of up to 16 colors, not a hardware color limit. The native 78 × 78 portrait keeps the anime dashboard: remaining quota, refill countdowns, RESET dates, reset bank and animated activity, with bitmap text and square frames. Skin, cheeks and background remain identical during a blink. Purple, red, blue and green remain supported. The first-start theme is `neon`; later runs restore your saved choice.
+Select **anime-pixel** for the adult pixel-art portrait with its three-quarter pose, violet bob, warm blush and small smile. It uses the existing [adult sprite and matching blink](docs/ANIME_PIXEL_ARTWORK.md#sources-and-runtime-assets), with the defined eyelash shape from that blink frame. The eyes close while the mouth, cheeks, hair and background stay unchanged. It keeps full RGB tones; `anime-pixel-chibi` retains the separate compact 16-color sprite style. The native 78 × 78 portrait keeps the anime dashboard: remaining quota, refill countdowns, RESET dates, reset bank and animated activity, with bitmap text and square frames. Purple, red, blue and green remain supported. The first-start theme is `neon`; later runs restore your saved choice.
 
 ![Anime pixel art working indicator and blink animation](docs/images/anime-pixel-demo.gif)
 
@@ -188,7 +188,7 @@ The same four colors are supported; purple is the default:
 | --- | --- |
 | ![Green anime pixel art with one vertical quota bar and blinking animation](docs/images/anime-pixel-green-pro-demo.gif) | ![Anime pixel art reset-credit screen](docs/images/anime-pixel-resets.png) |
 
-The pixel characters began with independent text-only generations, followed by edits using only this project's own generated artwork. Open-eye and blink images are exported at 78 × 78 as RGB runtime assets. The simple adult and chibi use an artistic palette; the detailed adult preserves its full RGB tones. Sources, prompts and export details are recorded in [Pixel artwork provenance](docs/ANIME_PIXEL_ARTWORK.md).
+The pixel characters began with independent text-only generations, followed by edits using only this project's own generated artwork. Open-eye and blink images are exported at 78 × 78 as RGB runtime assets. The normal and detailed adult keep RGB tones; chibi uses an artistic palette. Sources, prompts and export details are recorded in [Pixel artwork provenance](docs/ANIME_PIXEL_ARTWORK.md).
 
 ### Anime pixel art detail
 
@@ -196,27 +196,13 @@ Select **anime-pixel-detail** to keep the original adult portrait with its riche
 
 ![Detail blink and working animation](docs/images/anime-pixel-detail-demo.gif)
 
-| Purple | Red |
-| --- | --- |
-| ![Detail purple](docs/images/anime-pixel-detail-purple.png) | ![Detail red](docs/images/anime-pixel-detail-red.png) |
-| `--theme anime-pixel-detail --color purple` | `--theme anime-pixel-detail --color red` |
-
-| Blue | Green |
-| --- | --- |
-| ![Detail blue](docs/images/anime-pixel-detail-blue.png) | ![Detail green](docs/images/anime-pixel-detail-green.png) |
-| `--theme anime-pixel-detail --color blue` | `--theme anime-pixel-detail --color green` |
-
-| Single quota window | Reset bank |
-| --- | --- |
-| ![Detail single quota animation](docs/images/anime-pixel-detail-green-pro-demo.gif) | ![Detail reset bank](docs/images/anime-pixel-detail-resets.png) |
-
 ```sh
 ./start --address AA:BB:CC:DD:EE:FF --theme anime-pixel-detail --color green --encoding rgb
 ```
 
 ### Anime pixel art chibi
 
-The previous pixel character is preserved as **anime-pixel-chibi**, with a compact face and large eyes. It shares the adult variant's layout, blink and `purple`, `red`, `blue` and `green` colors. Both simple pixel characters have a gentle smile with their eyes open and a broader smile during the closed-eye frame. [Smile sources and animation export](docs/ANIME_PIXEL_SMILES.md).
+The previous pixel character is preserved as **anime-pixel-chibi**, with a compact face and large eyes. It shares the adult variant's layout, blink and `purple`, `red`, `blue` and `green` colors. Chibi's smile broadens when its eyes close; the normal adult portrait simply blinks. [Smile sources and animation export](docs/ANIME_PIXEL_SMILES.md).
 
 ![Chibi blink and working animation](docs/images/anime-pixel-chibi-demo.gif)
 
@@ -242,7 +228,7 @@ When an account only has a 7D window, this preview shows the centered vertical b
 
 ![Animated TimeBox Mini preview with only a 7D quota](docs/images/timebox-mini-7d-demo.gif)
 
-The default accent is cyan. You can choose **purple**, **red**, **blue**, or **green** with `--color`. The reset-count screen uses the selected accent and shows only the count in larger digits.
+The background is black, and the default accent is cyan. You can choose **purple**, **red**, **blue**, or **green** with `--color`. The reset-count screen uses the selected accent and shows only the count in larger digits.
 
 For example, select green with:
 
@@ -385,6 +371,7 @@ MiniToo themes send complete frames for their animations, using **lossless RGB88
 - **No usage bars:** Sign in to a ChatGPT account with Codex usage in the selected profile. If you use a separate profile, pass its path with `--codex-home`.
 - **401 Unauthorized / authentication token could not be parsed:** The credential used for the account's usage request was rejected. Interactive startup omits accounts whose profiles fail the live usage check. Credentials can still expire or change after that check. Restart `./start` to verify the profiles again; startup can recover through a matching profile if authentication changes after selection. If they all fail, follow the sign-in command printed for the affected directory and restart the monitor. Each Parall profile has its own sign-in state; signing in to the default CLI profile may not repair the selected profile. See the [Codex App Server authentication documentation](https://learn.chatgpt.com/docs/app-server#auth-endpoints).
 - **The bridge reports no data or an invalid response:** Run `./install` again to rebuild the bridges, confirm the selected Divoom is paired, and check its MAC address. For TimeBox Mini, close the Divoom app while connecting.
+- **TimeBox Mini cannot open RFCOMM channel 4:** Stop the monitor with `Ctrl+C`, then restart it with `./start`. If the same channel error returns, close the Divoom app and any other Divoom monitor, turn the TimeBox Mini off for 10 seconds, turn it back on, then restart `./start`. The monitor prints these recovery steps when it detects the channel-open error.
 - **Connection lost, bridge stopped, or transfer not confirmed:** The monitor closes the failed bridge and retries once over a new Bluetooth session. If both attempts fail, continuous monitoring keeps running and retries the current screen after 5, 10, 20, 40, then at most 60 seconds between attempts. Failed transfers are not cached as completed. `--once` exits with an error if neither attempt succeeds. Errors include the connection stage, the bridge exit code when available, and recent bridge logs.
 - **MiniToo stays on its loading screen:** The bridge handles chunk requests during both streaming and pull-mode transfers, validates packet checksums, and recognizes the [captured final completion response](https://github.com/alvinunreal/divoom-minitoo-osx/blob/main/PROTOCOL.md#final-ack) instead of treating any reply as confirmation. It requires an initial data request within 5 seconds: if MiniToo does not respond, it sends no image chunks and reconnects instead of uploading blindly. It waits up to 10 seconds for a requested block, uses a 40-second Bluetooth transaction deadline, and gives the local response up to 60 seconds. Missing confirmation triggers recovery on any screen. If the device is already stuck from a previous incomplete upload, stop the monitor, close the Divoom app and MiniToo Bluetooth audio connection, power-cycle the MiniToo, then restart the monitor. A missing acknowledgement means completion is unconfirmed; it does not by itself prove that the screen failed to update.
 - **Diagnosing a recurring freeze:** Each monitor saves timestamped errors and bridge output, including incoming Bluetooth control bytes. The default MiniToo log is `~/Library/Logs/divoom-minitoo-codex/minitoo-40584.log`; TimeBox Mini uses `~/Library/Logs/divoom-minitoo-codex/timebox-mini-40585.log`. The full path is printed at startup. Override it with `--log-file /path/to/monitor.log`. When reporting a freeze, include the log section around that time: it can distinguish an unresponsive device from an unrecognized reply. Logs include connection addresses and displayed quota values, but do not contain prompts, access tokens, or image data.

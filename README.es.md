@@ -163,7 +163,7 @@ El retrato anime se creó para este proyecto a partir de una descripción escrit
 
 ### Anime pixel art
 
-Selecciona **anime-pixel** para una mujer adulta de unos 24 años, dibujada con el mismo estilo sencillo de sprite retro que la chibi: mechones amplios, contornos definidos, nariz pequeña y sonrisa corta. Sus proporciones adultas y ojos almendrados más pequeños la distinguen de la chibi. Los [archivos y la descripción del sprite adulto](docs/ANIME_PIXEL_ADULT_RETRO.md) documentan esta revisión. Ambas usan una paleta artística de hasta 16 colores; no es un límite de color del dispositivo. El retrato de 78 × 78 conserva la interfaz del anime: cuota restante, tiempo hasta el refill, fechas de RECARGA, banco de reinicios y actividad animada, con texto de píxeles y marcos cuadrados. La piel, las mejillas y el fondo no cambian durante el parpadeo. Los colores morado, rojo, azul y verde siguen disponibles. La primera opción de tema es `neon`; las ejecuciones siguientes recuperan tu elección guardada.
+Selecciona **anime-pixel** para mostrar el retrato adulto en pixel art, con la cabeza ligeramente girada, cabello morado, rubor cálido y una sonrisa pequeña. Usa el [sprite adulto y su cuadro de parpadeo ya existentes](docs/ANIME_PIXEL_ARTWORK.md#sources-and-runtime-assets), con la forma de pestañas de ese cuadro. Solo cierran los ojos; la boca, las mejillas, el cabello y el fondo permanecen iguales. Conserva sus tonos RGB; `anime-pixel-chibi` mantiene su propio estilo compacto de 16 colores. El retrato de 78 × 78 conserva la interfaz del anime: cuota restante, tiempo hasta el refill, fechas de RECARGA, banco de reinicios y actividad animada, con texto de píxeles y marcos cuadrados. Los colores morado, rojo, azul y verde siguen disponibles. La primera opción de tema es `neon`; las ejecuciones siguientes recuperan tu elección guardada.
 
 ![Animación del indicador de actividad y parpadeo de anime pixel art](docs/images/anime-pixel-demo-es.gif)
 
@@ -188,7 +188,7 @@ Soporta los mismos cuatro colores; el morado es el predeterminado:
 | --- | --- |
 | ![Anime pixel art verde con una barra vertical de cuota y parpadeo](docs/images/anime-pixel-green-pro-demo-es.gif) | ![Pantalla de créditos de reset de anime pixel art](docs/images/anime-pixel-resets-es.png) |
 
-Los personajes pixel art comenzaron con generaciones independientes a partir de texto, seguidas de ajustes sobre sus propias imágenes. Los cuadros de ojos abiertos y cerrados se exportan a 78 × 78 como archivos RGB. La adulta sencilla y la chibi usan una paleta artística; la adulta detallada conserva todos sus tonos RGB. Los archivos fuente, los prompts y la exportación se documentan en [Procedencia del pixel art](docs/ANIME_PIXEL_ARTWORK.md).
+Los personajes pixel art comenzaron con generaciones independientes a partir de texto, seguidas de ajustes sobre sus propias imágenes. Los cuadros de ojos abiertos y cerrados se exportan a 78 × 78 como archivos RGB. Las dos versiones adultas conservan sus tonos RGB; la chibi usa una paleta artística. Los archivos fuente, los prompts y la exportación se documentan en [Procedencia del pixel art](docs/ANIME_PIXEL_ARTWORK.md).
 
 ### Anime pixel art detail
 
@@ -196,27 +196,13 @@ Selecciona **anime-pixel-detail** para conservar el retrato adulto original, con
 
 ![Parpadeo e indicador de actividad de detail](docs/images/anime-pixel-detail-demo-es.gif)
 
-| Morado | Rojo |
-| --- | --- |
-| ![Detail morado](docs/images/anime-pixel-detail-purple-es.png) | ![Detail rojo](docs/images/anime-pixel-detail-red-es.png) |
-| `--theme anime-pixel-detail --color purple` | `--theme anime-pixel-detail --color red` |
-
-| Azul | Verde |
-| --- | --- |
-| ![Detail azul](docs/images/anime-pixel-detail-blue-es.png) | ![Detail verde](docs/images/anime-pixel-detail-green-es.png) |
-| `--theme anime-pixel-detail --color blue` | `--theme anime-pixel-detail --color green` |
-
-| Una sola ventana de cuota | Banco de resets |
-| --- | --- |
-| ![Animación detail con una sola cuota](docs/images/anime-pixel-detail-green-pro-demo-es.gif) | ![Banco de resets detail](docs/images/anime-pixel-detail-resets-es.png) |
-
 ```sh
 ./start --address AA:BB:CC:DD:EE:FF --theme anime-pixel-detail --color green --encoding rgb
 ```
 
 ### Anime pixel art chibi
 
-El personaje pixel anterior se conserva como **anime-pixel-chibi**, con rostro compacto y ojos grandes. Comparte la interfaz, el parpadeo y los colores `purple`, `red`, `blue` y `green` de la versión adulta. Ambos personajes pixel sencillos tienen una sonrisa suave con los ojos abiertos y sonríen un poco más al cerrarlos. [Imágenes fuente y exportación de las sonrisas](docs/ANIME_PIXEL_SMILES.md).
+El personaje pixel anterior se conserva como **anime-pixel-chibi**, con rostro compacto y ojos grandes. Comparte la interfaz, el parpadeo y los colores `purple`, `red`, `blue` y `green` de la versión adulta. La chibi sonríe un poco más al cerrar los ojos; el retrato adulto normal simplemente pestañea. [Imágenes fuente y exportación de las sonrisas](docs/ANIME_PIXEL_SMILES.md).
 
 ![Parpadeo e indicador de actividad del tema chibi](docs/images/anime-pixel-chibi-demo-es.gif)
 
@@ -242,7 +228,7 @@ Si la cuenta solo tiene una ventana 7D, esta vista previa muestra la barra verti
 
 ![Vista previa animada de TimeBox Mini con una sola cuota 7D](docs/images/timebox-mini-7d-demo.gif)
 
-El color de acento predeterminado es cian. Con `--color` puedes elegir **morado**, **rojo**, **azul** o **verde**. La pantalla de resets usa ese color y muestra la cantidad con números grandes.
+El fondo es negro y el color de acento predeterminado es cian. Con `--color` puedes elegir **morado**, **rojo**, **azul** o **verde**. La pantalla de resets usa ese color y muestra la cantidad con números grandes.
 
 Por ejemplo, selecciona el verde así:
 
@@ -385,6 +371,7 @@ Los temas MiniToo envían cuadros completos para sus animaciones, en **RGB888/Zs
 - **No aparecen las barras de uso:** Inicia sesión en un perfil de ChatGPT con uso de Codex. Si utilizas otro perfil, pasa su ruta con `--codex-home`.
 - **401 Unauthorized / no se pudo interpretar el token de autenticación:** Se rechazó la credencial usada para consultar las cuotas de la cuenta. El inicio interactivo omite las cuentas cuyos perfiles no pasan la consulta de uso actual. Las credenciales todavía pueden vencer o cambiar después de esa comprobación. Reinicia `./start` para verificar los perfiles de nuevo; el inicio puede recuperarse con un perfil coincidente si la autenticación cambia después de seleccionarlo. Si todos fallan, ejecuta el comando de inicio de sesión que se muestra para el directorio afectado y reinicia el monitor. Cada perfil de Parall tiene su propio estado de sesión; iniciar sesión en el perfil predeterminado de CLI puede no reparar el perfil seleccionado. Consulta la [documentación de autenticación de Codex App Server](https://learn.chatgpt.com/docs/app-server#auth-endpoints).
 - **El puente no devuelve datos o la respuesta no es válida:** Ejecuta otra vez `./install` para recompilar los puentes, confirma que el dispositivo esté enlazado y revisa su dirección MAC. Para TimeBox Mini, cierra la aplicación Divoom al conectar.
+- **TimeBox Mini no puede abrir el canal RFCOMM 4:** Detén el monitor con `Ctrl+C` y vuelve a iniciarlo con `./start`. Si continúa el mismo error del canal, cierra la aplicación Divoom y cualquier otro monitor Divoom, apaga TimeBox Mini durante 10 segundos, vuelve a encenderlo y reinicia `./start`. El monitor muestra estos pasos de recuperación al detectar el fallo al abrir el canal.
 - **Se perdió la conexión, se detuvo el puente o no se confirmó una transferencia:** El monitor cierra el puente fallido e intenta una vez con una sesión Bluetooth nueva. Si ambos intentos fallan, el monitor continuo sigue ejecutándose e intenta de nuevo con pausas de 5, 10, 20, 40 y hasta 60 segundos. No marca como completada una transferencia fallida. `--once` termina con un error si los dos intentos fallan. Los mensajes muestran la etapa de conexión, el código de salida del puente cuando está disponible y sus logs recientes.
 - **MiniToo se queda en la pantalla de carga:** El puente procesa pedidos de bloques durante la transferencia, valida las sumas de comprobación de los paquetes y reconoce la [confirmación final capturada](https://github.com/alvinunreal/divoom-minitoo-osx/blob/main/PROTOCOL.md#final-ack) en vez de tomar cualquier respuesta como confirmación. Exige que MiniToo solicite los datos en los primeros 5 segundos; si no responde, no envía imágenes y reconecta. Espera hasta 10 segundos por un bloque solicitado, limita la transferencia Bluetooth a 40 segundos y espera hasta 60 segundos la respuesta local. La recuperación ocurre en cualquier pantalla. Si el dispositivo ya quedó bloqueado por una transferencia anterior incompleta, detén el monitor, cierra la aplicación Divoom y la conexión de audio Bluetooth de MiniToo, apaga y enciende MiniToo, y reinicia el monitor. Si falta la confirmación, la transferencia no está confirmada; eso no demuestra por sí solo que no se haya actualizado la pantalla.
 - **Diagnóstico de un bloqueo recurrente:** Cada monitor guarda logs con fecha y hora, errores y salida del puente, incluidos los bytes de control Bluetooth recibidos. El log predeterminado de MiniToo es `~/Library/Logs/divoom-minitoo-codex/minitoo-40584.log`; TimeBox Mini usa `~/Library/Logs/divoom-minitoo-codex/timebox-mini-40585.log`. La ruta completa se muestra al iniciar. Puedes elegir otra con `--log-file /ruta/al/monitor.log`. Al reportar un bloqueo, incluye la sección del log correspondiente: permite distinguir si el dispositivo no responde o si llegó una respuesta que el puente no reconoce. Los logs pueden incluir direcciones de conexión y porcentajes de uso mostrados; no contienen prompts, tokens de acceso ni imágenes.

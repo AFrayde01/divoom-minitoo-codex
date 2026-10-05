@@ -2,6 +2,24 @@ import Foundation
 import IOBluetooth
 import Network
 
+private func describeIOReturn(_ result: IOReturn) -> String {
+    let code = String(format: "0x%08x", UInt32(bitPattern: result))
+    let reason: String
+    switch result {
+    case kIOReturnError:
+        reason = "kIOReturnError: generic IOKit error; macOS did not report a specific cause"
+    case kIOReturnNotPrivileged:
+        reason = "kIOReturnNotPrivileged: access was denied"
+    case kIOReturnExclusiveAccess:
+        reason = "kIOReturnExclusiveAccess: another client may hold the device"
+    case kIOReturnBusy:
+        reason = "kIOReturnBusy: the device or channel is busy"
+    default:
+        return code
+    }
+    return "\(code) (\(reason))"
+}
+
 private struct BridgeRequest: Decodable {
     let authToken: String?
     let framesBase64: [String]
@@ -18,6 +36,26 @@ private struct BridgeResponse: Encodable {
     let message: String
     let chunks: Int?
     let acknowledged: Bool?
+}
+
+private final class SDPQueryCompletion: NSObject, IOBluetoothDeviceAsyncCallbacks {
+    private let lock = NSLock()
+    private var result: IOReturn?
+
+    var status: IOReturn? {
+        lock.lock()
+        defer { lock.unlock() }
+        return result
+    }
+
+    func sdpQueryComplete(_ device: IOBluetoothDevice!, status: IOReturn) {
+        lock.lock()
+        result = status
+        lock.unlock()
+    }
+
+    func remoteNameRequestComplete(_ device: IOBluetoothDevice!, status: IOReturn) {}
+    func connectionComplete(_ device: IOBluetoothDevice!, status: IOReturn) {}
 }
 
 /// The TimeBox Mini sends a short HELLO message and command acknowledgements.
@@ -64,16 +102,55 @@ private final class TimeBoxMiniBridge {
             throw bridgeError("Bluetooth device not found at \(address). Pair the TimeBox Mini first.")
         }
         self.device = device
+        let pairedBeforeOpen = device.isPaired()
+        let connectedBeforeOpen = device.isConnected()
         var opened: IOBluetoothRFCOMMChannel?
         let result = device.openRFCOMMChannelSync(&opened, withChannelID: 4, delegate: delegate)
         guard result == kIOReturnSuccess, let opened else {
+            let sdpSummary = queryRFCOMMChannels(on: device)
+            let connectedAfterSDP = device.isConnected()
             throw bridgeError(
-                "Could not open TimeBox Mini RFCOMM channel 4 (0x\(String(result, radix: 16))). " +
-                "Close the Divoom app's connection, then retry."
+                "Could not open TimeBox Mini RFCOMM channel 4: \(describeIOReturn(result)). " +
+                "Bluetooth state: paired=\(pairedBeforeOpen), connectedBeforeOpen=\(connectedBeforeOpen), " +
+                "connectedAfterSDP=\(connectedAfterSDP). \(sdpSummary)"
             )
         }
         channel = opened
         try startListener()
+    }
+
+    private func queryRFCOMMChannels(on device: IOBluetoothDevice) -> String {
+        let completion = SDPQueryCompletion()
+        let startResult = device.performSDPQuery(completion)
+        guard startResult == kIOReturnSuccess else {
+            return "SDP query could not start: \(describeIOReturn(startResult))."
+        }
+
+        let deadline = Date(timeIntervalSinceNow: 4)
+        while completion.status == nil && Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
+        }
+        guard let status = completion.status else {
+            return "SDP service query timed out after 4 seconds."
+        }
+        guard status == kIOReturnSuccess else {
+            return "SDP service query failed: \(describeIOReturn(status))."
+        }
+        guard let records = device.services as? [IOBluetoothSDPServiceRecord] else {
+            return "SDP query completed without readable service records."
+        }
+
+        let services = Set(records.compactMap { record -> String? in
+            var channelID: BluetoothRFCOMMChannelID = 0
+            guard record.getRFCOMMChannelID(&channelID) == kIOReturnSuccess else { return nil }
+            let name = (record.getServiceName() ?? "")
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(name.isEmpty ? "(unnamed)" : name)=\(Int(channelID))"
+        }).sorted()
+        let summary = services.isEmpty ? "none" : services.joined(separator: ", ")
+        return "SDP advertised RFCOMM services (name=channel): \(summary)."
     }
 
     private func startListener() throws {
@@ -267,7 +344,7 @@ private final class TimeBoxMiniBridge {
             channel.writeSync(buffer.baseAddress, length: length)
         }
         guard result == kIOReturnSuccess else {
-            throw bridgeError("RFCOMM write failed (0x\(String(result, radix: 16))).")
+            throw bridgeError("RFCOMM write failed: \(describeIOReturn(result)).")
         }
     }
 
