@@ -16,7 +16,7 @@ class SwiftBridgeTests(unittest.TestCase):
         # Keep production types and transfer logic; replace only the entry
         # point that normally opens Bluetooth and starts the localhost server.
         production, entry_point = source.split("\nlet arguments = CommandLine.arguments\n", 1)
-        self.assertIn("bridge.start()", entry_point)
+        self.assertIn("bridge.start(resetBluetoothLink: resetBluetoothLink)", entry_point)
         harness = (root / "tests/MiniTooBridgeHarness.swift").read_text()
         with tempfile.TemporaryDirectory(prefix="divoom-bridge-check-") as directory:
             directory = Path(directory)
