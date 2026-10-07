@@ -9,6 +9,7 @@ import secrets
 import socket
 import subprocess
 import time
+from collections.abc import Callable
 from collections import deque
 from pathlib import Path
 from threading import Event, Lock, Thread
@@ -17,6 +18,7 @@ from threading import Event, Lock, Thread
 # MiniToo allows up to 40 seconds for its Bluetooth transaction. The local
 # caller must outlive that deadline and leave time for the JSON response.
 BRIDGE_RESPONSE_TIMEOUT_SECONDS = 60
+MINITOO_RECOVERY_COOLDOWN_SECONDS = 10
 MAX_REQUEST_BYTES = 512 * 1024
 AUTHENTICATED_READY_MARKER = "authenticated local listener ready on port"
 
@@ -41,6 +43,7 @@ class MiniTooBridge:
         self._stderr_thread: Thread | None = None
         self._auth_token: str | None = None
         self._protocol_mismatch = False
+        self._reset_bluetooth_link_before_start = False
         # Diagnostic scripts use separately compiled bridges; regular monitors
         # leave this unset and keep their existing JPEG request format.
         self.diagnostic_codec: str | None = None
@@ -89,8 +92,15 @@ class MiniTooBridge:
             )
         try:
             self._auth_token = secrets.token_hex(32)
+            command = [str(self.executable), self.address, str(self.port)]
+            if self.display_name == "MiniToo" and self._reset_bluetooth_link_before_start:
+                command.append("--reset-link")
+            # A requested baseband reset is consumed by exactly one helper
+            # start. If that attempt fails, the outer monitor can retry later
+            # without repeatedly cycling the speaker's Bluetooth link.
+            self._reset_bluetooth_link_before_start = False
             self.process = subprocess.Popen(
-                [str(self.executable), self.address, str(self.port)],
+                command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
@@ -229,14 +239,35 @@ class MiniTooBridge:
         return result
 
     def send_frames_with_recovery(
-        self, frames: list[bytes], speed_ms: int = 400, *, require_ack: bool = False
+        self, frames: list[bytes], speed_ms: int = 400, *, require_ack: bool = False,
+        pause_requested: Callable[[], bool] | None = None,
+        recovery_wait_notice: Callable[[int], None] | None = None,
     ) -> dict[str, object]:
         """Retry one failed transaction over a new Bluetooth session."""
         failures: list[str] = []
         for attempt in range(2):
+            if pause_requested is not None and pause_requested():
+                self.close()
+                return {"ok": False, "paused": True, "message": "microphone became active"}
             try:
                 if attempt:
                     self.close()
+                    if self.display_name == "MiniToo":
+                        # MiniToo can keep reporting the previous transaction
+                        # briefly after RFCOMM closes. Let that session settle
+                        # before cycling the baseband and opening RFCOMM again.
+                        wait_until = time.monotonic() + MINITOO_RECOVERY_COOLDOWN_SECONDS
+                        if recovery_wait_notice is not None:
+                            recovery_wait_notice(MINITOO_RECOVERY_COOLDOWN_SECONDS)
+                        while time.monotonic() < wait_until:
+                            if pause_requested is not None and pause_requested():
+                                self.close()
+                                return {"ok": False, "paused": True, "message": "microphone became active"}
+                            time.sleep(min(1.0, wait_until - time.monotonic()))
+                        # After a failed transfer, start the next helper with
+                        # an explicit Bluetooth baseband reconnect. Closing
+                        # only the child process can leave the device link stale.
+                        self._reset_bluetooth_link_before_start = True
                 result = self.send_frames(frames, speed_ms=speed_ms)
                 if require_ack and result.get("acknowledged") is not True:
                     diagnostics = self._bridge_diagnostics()
@@ -246,21 +277,33 @@ class MiniTooBridge:
                         + (f". Details: {diagnostics}." if diagnostics else "")
                     )
                 result["reconnected"] = bool(attempt)
+                self._reset_bluetooth_link_before_start = False
                 return result
             except MiniTooError as exc:
                 failures.append(str(exc))
                 if self.logger is not None:
                     self.logger.warning("Transfer attempt %s/2 failed: %s", attempt + 1, exc)
+                if pause_requested is not None and pause_requested():
+                    self.close()
+                    return {"ok": False, "paused": True, "message": "microphone became active"}
         self.close()
+        self._reset_bluetooth_link_before_start = False
         timebox_channel_open_failed = (
             self.display_name == "TimeBox Mini"
             and any("Could not open TimeBox Mini RFCOMM channel 4" in failure for failure in failures)
+        )
+        minitoo_channel_open_failed = (
+            self.display_name == "MiniToo"
+            and any("Could not open MiniToo RFCOMM channel" in failure for failure in failures)
         )
         recovery_hint = (
             " Stop the monitor with Ctrl+C, then restart it with ./start. "
             "If the same channel error returns, close the Divoom app and any other Divoom monitor, "
             "turn the TimeBox Mini off for 10 seconds, turn it back on, then restart ./start."
             if timebox_channel_open_failed
+            else " A software Bluetooth link reset was attempted. If MiniToo stays on Loading or the channel error repeats, "
+            "stop the monitor with Ctrl+C, turn MiniToo off for 10 seconds, turn it back on, then run ./start."
+            if minitoo_channel_open_failed
             else ""
         )
         raise MiniTooError(
@@ -270,24 +313,57 @@ class MiniTooBridge:
             + " Reconnect attempt: " + failures[1]
         )
 
-    def close(self) -> None:
+    def close(self, *, suppress_interrupt: bool = False) -> None:
         process = self.process
         self.process = None
         self._auth_token = None
+        interrupted = False
         if process is not None and process.poll() is None:
-            process.terminate()
             try:
-                process.wait(timeout=3)
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3)
+            except KeyboardInterrupt:
+                # SIGINT can arrive while Popen.wait() is doing its own
+                # post-interrupt child wait. Kill the helper and reap it, then
+                # let the caller decide whether this interrupt should escape.
+                interrupted = True
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                try:
+                    process.wait(timeout=3)
+                except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                    pass
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3)
+                # The child did not exit even after kill; it is no longer safe
+                # to block shutdown on it.
+                try:
+                    process.kill()
+                except OSError:
+                    pass
         if self._stderr_thread is not None:
-            self._stderr_thread.join(timeout=1)
+            try:
+                self._stderr_thread.join(timeout=1)
+            except KeyboardInterrupt:
+                interrupted = True
             self._stderr_thread = None
         if process is not None and process.stderr is not None:
-            process.stderr.close()
+            try:
+                process.stderr.close()
+            except KeyboardInterrupt:
+                interrupted = True
         if process is not None and process.stdin is not None:
-            process.stdin.close()
+            try:
+                process.stdin.close()
+            except KeyboardInterrupt:
+                interrupted = True
+        if interrupted and not suppress_interrupt:
+            raise KeyboardInterrupt
 
     def __enter__(self) -> "MiniTooBridge":
         self.start()
