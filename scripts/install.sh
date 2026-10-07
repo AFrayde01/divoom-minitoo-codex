@@ -21,6 +21,7 @@ mkdir -p build
 swiftc -O -module-cache-path build/swift-module-cache Sources/MiniTooBridge.swift -framework IOBluetooth -framework Network -o build/minitoo-bridge
 swiftc -O -module-cache-path build/swift-module-cache Sources/TimeBoxMiniBridge.swift -framework IOBluetooth -framework Network -o build/timebox-mini-bridge
 swiftc -O -module-cache-path build/swift-module-cache Sources/BluetoothDevices.swift -framework IOBluetooth -o build/divoom-devices
+swiftc -O -module-cache-path build/swift-module-cache Sources/BrowserMicrophoneMonitor.swift -framework CoreAudio -o build/browser-microphone-monitor
 
 .venv/bin/python scripts/install_activity_hooks.py setup "$@"
 

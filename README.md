@@ -95,11 +95,16 @@ To show only TimeBox Mini devices:
 
 Keep Terminal open while it runs; stop it with `Ctrl+C`. It reads usage at startup and every 60 seconds, checks activity every second, and reads usage again when a Codex turn ends. It sends an image when the display changes. The hook is silent in the Codex conversation; its status appears on the display.
 
+On macOS 14.2 or newer, the monitor checks Core Audio for any app with an active microphone input stream. It does not capture or inspect audio. While microphone input is active, the terminal shows that updates are paused and closes the Bluetooth connection. When input stops, it resumes with a display refresh. This is a microphone-use signal, not direct Google Meet detection, so another app using the microphone can also pause the monitor. Run `./install` after updating to build the detector. Use `--no-auto-pause` to disable this behavior.
+
+After a failed MiniToo transfer, the bridge waits 10 seconds for the previous Bluetooth session to settle, then makes one bounded retry with a software link reset. It does not reset the link just because microphone input stopped, and it consumes at most one reset per retry cycle. A reset can briefly disconnect MiniToo's Bluetooth audio profile. The terminal shows that updates are paused during this cooldown and while the device is not responding. If the display remains on **Loading** and the channel error continues, stop the monitor, power MiniToo off for 10 seconds, turn it back on, and run `./start` again.
+
 ### Startup choices and terminal output
 
 - Use **↑ / ↓** to move through languages, accounts, speakers, themes and colors, then **Enter** to select. Numbers **1–9** jump to an option; **Esc / Q** or **Ctrl+C** cancel. Press Enter immediately to keep the highlighted choice. Terminals without key-mode support fall back to number/name input. Anime colors start with purple; TimeBox Mini starts with cyan. Neon and the robot pixel-art theme use fixed palettes.
 - Explicit `--language`, `--codex-home`, `--theme` and `--color` values take priority and skip their respective questions. Continuous runs remember theme/color choices separately for each device, one shared language, and the last profile that successfully returned usage.
 - Add `--no-prompt` to start directly with explicit options or your saved choices. `--once`, `--preview`, redirected input/output and `TERM=dumb` also skip the menu; once/preview runs leave saved choices unchanged.
+- Automatic microphone pause is enabled by default on macOS 14.2 or newer. It pauses while any app has active microphone input and resumes after capture stops. Add `--no-auto-pause` to keep Bluetooth updates running.
 - Without a menu, automatic detection must find exactly one matching speaker; otherwise specify `--device` or `--address`. An explicit address (or `MINITOO_ADDRESS`) bypasses detection; without a model, an explicit address uses MiniToo. Preview defaults to MiniToo without reading Bluetooth.
 - Transfer updates **replace one status line** by default. It shows the latest send time, remaining quota, activity and displayed page. Long status text is clipped to fit the terminal; errors and the diagnostic log retain full details.
 - Add `--sent detailed` for one complete line per successful send, including TimeBox Mini animation frames. Redirected output always uses plain lines.

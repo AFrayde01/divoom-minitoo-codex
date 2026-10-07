@@ -17,6 +17,7 @@ from pathlib import Path
 from .appserver import AccountAuthenticationError, AppServerError, CodexAppServer, UsageSnapshot
 from .activity import ACTIVITY_FILE, inspect_activity_hooks, read_activity
 from .bridge import MiniTooBridge, MiniTooError
+from .browser_microphone import BrowserMicrophoneMonitor, default_browser_microphone_monitor
 from .diagnostics import PrivateRotatingFileHandler, default_log_path, private_log_directory, secure_existing_log
 from .discovery import DiscoveryError, discover_devices, normalize_address
 from .preferences import (
@@ -138,6 +139,10 @@ def _parser(language: str = "en") -> argparse.ArgumentParser:
         help=t("Saved color or chosen palette. First use: cyan for TimeBox Mini, purple for MiniToo portraits."),
     )
     parser.add_argument("--once", action="store_true", help=t("Refresh the display once and exit."))
+    parser.add_argument(
+        "--no-auto-pause", action="store_true",
+        help=t("Keep Bluetooth updates running while any app uses the microphone."),
+    )
     parser.add_argument("--preview", type=Path, help=t("Save a preview image without using Bluetooth."))
     parser.add_argument(
         "--no-prompt", action="store_true",
@@ -479,6 +484,7 @@ def main() -> int:
         return 2
 
     bridge: MiniTooBridge | None = None
+    browser_microphone: BrowserMicrophoneMonitor | None = None
     previous_digest: str | None = None
     next_display_retry: float | None = None
     display_failures = 0
@@ -581,17 +587,48 @@ def main() -> int:
                 except OSError as exc:
                     report(t("Could not save the Codex profile; this monitor will still run. {detail}", detail=exc), error=True)
             if not args.preview:
-                terminal.step(t("Usage received. Connecting to the authenticated Bluetooth bridge…"))
+                terminal.step(t("Usage received. Preparing the display monitor…"))
+            if not args.once and not args.preview and not args.no_auto_pause:
+                browser_microphone = default_browser_microphone_monitor()
+                if browser_microphone.start():
+                    report(t(
+                        "Automatic microphone pause is enabled; Bluetooth updates pause while any app uses the microphone."
+                    ))
+                else:
+                    report(t(
+                        "Automatic microphone pause is unavailable: {detail} Continuing without automatic pause.",
+                        detail=browser_microphone.error or "unknown detector error",
+                    ), error=True)
+                    browser_microphone = None
+            elif args.no_auto_pause and not args.once and not args.preview:
+                report(t("Automatic microphone pause is disabled."))
             next_usage_read = time.monotonic() + args.interval
             next_reset_screen = time.monotonic() + RESET_CREDITS_SCREEN_INTERVAL_SECONDS
             reset_screen_until: float | None = None
             previous_activity_state: tuple[bool, bool] | None = None
             previous_screen_mode = "usage"
+            previous_browser_microphone_active: bool | None = None
             timebox_usage_page = "bars"
             next_timebox_usage_page = time.monotonic() + TIMEBOX_MINI_USAGE_PAGE_SECONDS
             previous_timebox_view: str | None = None
             timebox_working_started_at: float | None = None
             while True:
+                browser_microphone_active = (
+                    browser_microphone.active if browser_microphone is not None else False
+                )
+                browser_pause_changed = browser_microphone_active != previous_browser_microphone_active
+                if browser_pause_changed and browser_microphone_active:
+                    if bridge is not None:
+                        bridge.close()
+                    report(t(
+                        "Updates paused: microphone input is active."
+                    ), update=True, compact_message=t("Updates paused: microphone input is active."))
+                elif browser_pause_changed and previous_browser_microphone_active:
+                    previous_digest = None
+                    next_display_retry = None
+                    report(t("Updates resumed; refreshing the display."), update=True)
+                previous_browser_microphone_active = browser_microphone_active
+
                 activity = read_activity(args.activity_file, codex_homes=activity_homes)
                 activity_state = (activity.working, activity.hooks_installed)
                 turn_finished = (
@@ -665,6 +702,7 @@ def main() -> int:
                     args.preview
                     or refreshed
                     or activity_state != previous_activity_state
+                    or browser_pause_changed
                     or screen_changed
                     or timebox_view_changed
                     or timebox_animation_changed
@@ -736,7 +774,21 @@ def main() -> int:
                             for image in images
                         ]
                     digest = hashlib.sha256(b"\0".join(frames)).hexdigest()
-                    if digest != previous_digest and (
+                    if (
+                        browser_microphone is not None
+                        and not browser_microphone_active
+                        and browser_microphone.active
+                    ):
+                        # Recheck immediately before Bluetooth I/O in case a
+                        # meeting began during a usage refresh or rendering.
+                        browser_microphone_active = True
+                        previous_browser_microphone_active = True
+                        if bridge is not None:
+                            bridge.close()
+                        previous_digest = None
+                        next_display_retry = None
+                        report(t("Updates paused: microphone input is active."), update=True)
+                    if digest != previous_digest and not browser_microphone_active and (
                         next_display_retry is None or loop_time >= next_display_retry
                     ):
                         assert bridge is not None
@@ -745,6 +797,16 @@ def main() -> int:
                                 frames,
                                 speed_ms=animation_speed,
                                 require_ack=args.device == "minitoo",
+                                pause_requested=(
+                                    lambda: browser_microphone is not None and browser_microphone.active
+                                ),
+                                recovery_wait_notice=lambda seconds: report(
+                                    t(
+                                        "Updates paused: MiniToo is settling; reconnecting in {seconds}s.",
+                                        seconds=seconds,
+                                    ),
+                                    update=True,
+                                ),
                             )
                         except MiniTooError as exc:
                             if args.once:
@@ -756,6 +818,23 @@ def main() -> int:
                             # loading; no cached digest is now safe to reuse.
                             previous_digest = None
                             report(t("{detail} Retrying the current screen in {seconds}s.", detail=translate_error(str(exc), args.language), seconds=retry_delay), error=True)
+                            report(
+                                t("Updates paused: the Divoom is not responding; retrying in {seconds}s.", seconds=retry_delay),
+                                update=True,
+                            )
+                            previous_activity_state = activity_state
+                            previous_screen_mode = screen_mode
+                            previous_timebox_view = timebox_view
+                            time.sleep(1)
+                            continue
+                        if result.get("paused"):
+                            browser_microphone_active = True
+                            previous_browser_microphone_active = True
+                            if bridge is not None:
+                                bridge.close()
+                            previous_digest = None
+                            next_display_retry = None
+                            report(t("Updates paused: microphone input is active."), update=True)
                             previous_activity_state = activity_state
                             previous_screen_mode = screen_mode
                             previous_timebox_view = timebox_view
@@ -820,8 +899,10 @@ def main() -> int:
         report(t("Monitor stopped."))
         return 0
     finally:
+        if browser_microphone is not None:
+            browser_microphone.stop()
         if bridge is not None:
-            bridge.close()
+            bridge.close(suppress_interrupt=True)
         if log_handler is not None:
             log_handler.close()
         terminal.finish()

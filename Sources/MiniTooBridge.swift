@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import IOBluetooth
 import Network
 
@@ -153,21 +154,49 @@ private final class MiniTooBridge {
         self.connectionLimit = connectionLimit
     }
 
-    func start() throws {
+    func start(resetBluetoothLink: Bool = false) throws {
         guard let device = IOBluetoothDevice(addressString: address) else {
             throw bridgeError("Bluetooth device not found at \(address). Pair the MiniToo first.")
         }
         self.device = device
+        if resetBluetoothLink {
+            try resetBasebandConnection(device, reason: "bounded retry after a failed display transfer")
+        }
         var opened: IOBluetoothRFCOMMChannel?
         let result = device.openRFCOMMChannelSync(&opened, withChannelID: 1, delegate: delegate)
         guard result == kIOReturnSuccess, let opened else {
-            throw bridgeError(
-                "Could not open MiniToo RFCOMM channel (0x\(String(result, radix: 16))). " +
-                "Disconnect its Bluetooth audio profile, then retry."
-            )
+            let disconnectResult = device.closeConnection()
+            log("closed Bluetooth baseband after RFCOMM failure (\(returnCode(disconnectResult)))")
+            throw bridgeError("Could not open MiniToo RFCOMM channel (\(returnCode(result))).")
         }
         channel = opened
         try startListener()
+    }
+
+    private func resetBasebandConnection(_ device: IOBluetoothDevice, reason: String) throws {
+        log("resetting Bluetooth baseband link (\(reason))")
+        let closeResult = device.closeConnection()
+        log("Bluetooth baseband close returned \(returnCode(closeResult))")
+        Thread.sleep(forTimeInterval: 1.0)
+        let openResult = device.openConnection()
+        guard openResult == kIOReturnSuccess || device.isConnected() else {
+            throw bridgeError(
+                "Bluetooth baseband reconnect failed after RFCOMM trouble " +
+                "(close: \(returnCode(closeResult)), reconnect: \(returnCode(openResult)))."
+            )
+        }
+        log("Bluetooth baseband link restored (\(returnCode(openResult)))")
+        Thread.sleep(forTimeInterval: 0.5)
+    }
+
+    func shutdown() {
+        listener?.cancel()
+        listener = nil
+        if let channel {
+            let result = channel.close()
+            log("closed RFCOMM channel during shutdown (\(returnCode(result)))")
+            self.channel = nil
+        }
     }
 
     private func startListener() throws {
@@ -628,11 +657,15 @@ private final class MiniTooBridge {
     private func log(_ message: String) {
         fputs("MiniToo bridge: \(message)\n", stderr)
     }
+
+    private func returnCode(_ value: IOReturn) -> String {
+        "0x\(String(value, radix: 16))"
+    }
 }
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
-    fputs("Usage: minitoo-bridge <bluetooth-address> [localhost-port]\n", stderr)
+    fputs("Usage: minitoo-bridge <bluetooth-address> [localhost-port] [--reset-link]\n", stderr)
     exit(2)
 }
 let address = arguments[1]
@@ -643,10 +676,25 @@ guard let authToken = readLine(), authToken.utf8.count == 64,
     exit(2)
 }
 private let bridge = MiniTooBridge(address: address, port: port, authToken: authToken)
+let resetBluetoothLink = arguments.contains("--reset-link")
+signal(SIGINT, SIG_IGN)
+signal(SIGTERM, SIG_IGN)
+let shutdownSignals = [SIGINT, SIGTERM].map { value -> DispatchSourceSignal in
+    let source = DispatchSource.makeSignalSource(signal: value, queue: .main)
+    source.setEventHandler {
+        bridge.shutdown()
+        CFRunLoopStop(CFRunLoopGetMain())
+    }
+    source.resume()
+    return source
+}
 do {
-    try bridge.start()
+    try bridge.start(resetBluetoothLink: resetBluetoothLink)
     RunLoop.main.run()
 } catch {
+    bridge.shutdown()
     fputs("MiniToo bridge: \(error.localizedDescription)\n", stderr)
     exit(1)
 }
+shutdownSignals.forEach { $0.cancel() }
+bridge.shutdown()
